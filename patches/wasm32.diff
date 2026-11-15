@@ -1,0 +1,354 @@
+diff --git a/services/common/src/jsonata.rs b/services/common/src/jsonata.rs
+index dc72fe18f..f670e34ce 100644
+--- a/services/common/src/jsonata.rs
++++ b/services/common/src/jsonata.rs
+@@ -149,7 +149,7 @@ static LIVE_EVALUATIONS: AtomicUsize = AtomicUsize::new(0);
+ /// aborting panic, so a profile built with `panic = "abort"` would turn the arena's
+ /// refusal — and the engine's own `unreachable!()` on some malformed expressions —
+ /// into the death of the serving process instead of a refusal.
+-#[cfg(panic = "abort")]
++#[cfg(all(panic = "abort", not(target_family = "wasm")))]
+ compile_error!(
+     "evaluating a caller's JSONata expression needs catch_unwind, so this crate requires \
+      panic = \"unwind\" (the default)"
+diff --git a/services/service-com-amazonaws-cloudwatch-graniteserviceversion20100801/src/service.rs b/services/service-com-amazonaws-cloudwatch-graniteserviceversion20100801/src/service.rs
+index 2ca9ca8be..c716f742f 100644
+--- a/services/service-com-amazonaws-cloudwatch-graniteserviceversion20100801/src/service.rs
++++ b/services/service-com-amazonaws-cloudwatch-graniteserviceversion20100801/src/service.rs
+@@ -97,6 +97,7 @@ type ServedDefinition<Eng> = service_common::query_error_envelope::RequestIdEnve
+ /// there is no other worker to protect.
+ pub(crate) fn off_the_async_worker<T>(work: impl FnOnce() -> T) -> T {
+     match tokio::runtime::Handle::try_current().map(|handle| handle.runtime_flavor()) {
++        #[cfg(not(target_family = "wasm"))]
+         Ok(tokio::runtime::RuntimeFlavor::MultiThread) => tokio::task::block_in_place(work),
+         _ => work(),
+     }
+diff --git a/services/service-com-amazonaws-kinesis-kinesis-20131202/Cargo.toml b/services/service-com-amazonaws-kinesis-kinesis-20131202/Cargo.toml
+index 0ab6e9f16..31cebce79 100644
+--- a/services/service-com-amazonaws-kinesis-kinesis-20131202/Cargo.toml
++++ b/services/service-com-amazonaws-kinesis-kinesis-20131202/Cargo.toml
+@@ -32,7 +32,7 @@ md-5 = "0.10"
+ sha2 = { workspace = true }
+ # Resolves the `KeyId` a `StartStreamEncryption` request names against KMS, over the
+ # emulator's own in-process transport, before the stream is reported as encrypted under it.
+-aws-sdk-kms = { version = "1", default-features = false, features = ["rt-tokio", "behavior-version-latest"] }
++aws-sdk-kms = { version = "1", default-features = false, features = ["behavior-version-latest"] }
+ # The one place this tree states the Region LABEL grammar, for the caller-supplied region
+ # that ends up in the authority of the KMS endpoint the lookup above is routed on.
+ service-common = { path = "../common" }
+@@ -43,17 +43,5 @@ service-com-amazonaws-s3tables-s3tablebuckets = { workspace = true }
+ [build-dependencies]
+ emulator-core-build-support = { workspace = true }
+ 
+-[dev-dependencies]
+-sha2 = { workspace = true }
+-# Decodes one `application/vnd.amazon.eventstream` frame, so the enhanced fan-out suite reads
+-# the frames `SubscribeToShard` answers with the way an SDK's decoder does.
+-aws-smithy-eventstream = "0.60"
+-# The encryption suites mount the KMS service beside Kinesis on one engine, because
+-# `StartStreamEncryption` resolves the `KeyId` it is given by calling it.
+-service-com-amazonaws-kms-trentservice = { workspace = true }
+-# The channel-key suite mounts IAM beside them too: a channel's create asks IAM whether its
+-# service execution role may use that key.
+-service-com-amazonaws-iam-awsidentitymanagementv20100508 = { workspace = true }
+-
+ [lints]
+ workspace = true
+diff --git a/vendor/emulator-telemetry/Cargo.toml b/vendor/emulator-telemetry/Cargo.toml
+index 03125c457..e76627597 100644
+--- a/vendor/emulator-telemetry/Cargo.toml
++++ b/vendor/emulator-telemetry/Cargo.toml
+@@ -12,7 +12,6 @@ name = "emulator_telemetry"
+ serde = { version = "1", features = ["derive"] }
+ serde_json = "1"
+ http = "1"
+-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+ rusqlite = { version = ">=0.37, <0.42", features = ["bundled"] }
+ time = { version = "0.3.55", default-features = false, features = ["formatting", "parsing"] }
+ toml = "0.9"
+@@ -20,6 +19,12 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
+ uuid = { version = "1", features = ["v4"] }
+ emulator-paths = { path = "../emulator-paths", package = "aws-emulator-emulator-paths", version = "*" }
+ 
++[target.'cfg(not(target_family = "wasm"))'.dependencies]
++reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
++
++[target.'cfg(target_family = "wasm")'.dependencies]
++url = "2"
++
+ [target.'cfg(target_vendor = "apple")'.dependencies]
+ libc = "0.2"
+ 
+diff --git a/vendor/emulator-telemetry/src/client.rs b/vendor/emulator-telemetry/src/client.rs
+index 89eb7273e..0716e6a40 100644
+--- a/vendor/emulator-telemetry/src/client.rs
++++ b/vendor/emulator-telemetry/src/client.rs
+@@ -8,6 +8,8 @@
+ //! telemetry must never affect emulator behavior, output, or shutdown beyond
+ //! the bounded final flush the caller explicitly requests.
+ 
++#[cfg(target_family = "wasm")]
++use crate::reqwest_shim as reqwest;
+ use crate::config::{
+     build_http_client, current_config, load_cached_config, resolve_config_file, resolve_state_dir,
+     resolve_switch, switch_env_value, CollectionDenial, ConfigRefresh, Endpoint, ServerConfig,
+diff --git a/vendor/emulator-telemetry/src/config.rs b/vendor/emulator-telemetry/src/config.rs
+index 156eb7ba3..5fa8ad497 100644
+--- a/vendor/emulator-telemetry/src/config.rs
++++ b/vendor/emulator-telemetry/src/config.rs
+@@ -5,6 +5,8 @@
+ //! client version). Every policy value referenced here lives in
+ //! [`crate::policy`].
+ 
++#[cfg(target_family = "wasm")]
++use crate::reqwest_shim as reqwest;
+ use crate::outbox::fnv1a;
+ use crate::policy::{self, TELEMETRY_DEFAULT_ENABLED};
+ use crate::types::{
+diff --git a/vendor/emulator-telemetry/src/lib.rs b/vendor/emulator-telemetry/src/lib.rs
+index 937bfeef5..daa67fbec 100644
+--- a/vendor/emulator-telemetry/src/lib.rs
++++ b/vendor/emulator-telemetry/src/lib.rs
+@@ -11,6 +11,8 @@
+ //! [`ProjectId`] the emulator was generated for and its [`ProductVersion`].
+ 
+ mod client;
++#[cfg(target_family = "wasm")]
++mod reqwest_shim;
+ mod config;
+ mod metadata;
+ mod outbox;
+diff --git a/vendor/server/Cargo.toml b/vendor/server/Cargo.toml
+index 07ddc6928..2a39f3163 100644
+--- a/vendor/server/Cargo.toml
++++ b/vendor/server/Cargo.toml
+@@ -11,14 +11,11 @@ bytes = "1"
+ serde = { version = "1", features = ["derive"] }
+ serde_json = "1"
+ parking_lot = "0.12"
+-tokio = { version = "1", features = ["full"] }
+ hyper = { version = "1", features = ["server", "http1", "http2"] }
+ hyper-util = { version = "0.1", features = ["tokio", "server-auto"] }
+ aws-smithy-runtime-api = { version = "1.11.3", features = ["client", "http-1x"] }
+ aws-smithy-types = "1"
+ http-body-util = "0.1.3"
+-axum = "0.8"
+-axum-server = { version = "0.7", features = ["tls-rustls"] }
+ rcgen = "0.13"
+ rustls = { version = "0.23", features = ["aws-lc-rs"] }
+ tokio-rustls = "0.26"
+@@ -33,3 +30,12 @@ yasna = "0.5"
+ emulator-paths = { path = "../emulator-paths", package = "aws-emulator-emulator-paths", version = "*" }
+ emulator-telemetry = { path = "../emulator-telemetry", package = "aws-emulator-emulator-telemetry", version = "*" }
+ aws-smithy-schema-server = { path = "../smithy-schema-server", package = "aws-emulator-smithy-schema-server", version = "*" }
++
++[target.'cfg(not(target_family = "wasm"))'.dependencies]
++axum = "0.8"
++tokio = { version = "1", features = ["full"] }
++axum-server = { version = "0.7", features = ["tls-rustls"] }
++
++[target.'cfg(target_family = "wasm")'.dependencies]
++axum = { version = "0.8", default-features = false, features = ["form", "http1", "json", "matched-path", "original-uri", "query", "tower-log", "tracing"] }
++tokio = { version = "1", features = ["sync", "macros", "io-util", "rt", "time"] }
+diff --git a/vendor/server/src/lib.rs b/vendor/server/src/lib.rs
+index cb6ba870c..9a5bb961c 100644
+--- a/vendor/server/src/lib.rs
++++ b/vendor/server/src/lib.rs
+@@ -830,6 +830,7 @@ pub fn with_panic_guard(router: axum::Router) -> axum::Router {
+ ///
+ /// Returns `(endpoint_url, service)` after the server is ready to accept connections.
+ /// The server runs in a background tokio task.
++#[cfg(not(target_family = "wasm"))]
+ pub async fn serve_on_ephemeral_port<S: EmulatorService>(service: S) -> (String, S) {
+     let std_listener = std::net::TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+         .expect("failed to bind ephemeral port");
+@@ -1140,6 +1141,7 @@ fn parse_port(raw: Option<&str>, default: u16) -> u16 {
+ /// `endpoint_url` carry the *real* port when `data_port == 0`; otherwise the
+ /// announcement would advertise the placeholder `:0` and the launcher could not
+ /// discover the endpoint.
++#[cfg(not(target_family = "wasm"))]
+ fn bind_production_listener(
+     bind_address: IpAddr,
+     data_port: u16,
+@@ -1167,6 +1169,7 @@ fn bind_production_listener(
+ ///
+ /// Delegates to [`serve_production_on_address`]; callers that must pin explicit
+ /// ports (e.g. tests) can call [`serve_production_on`] directly.
++#[cfg(not(target_family = "wasm"))]
+ pub async fn serve_production<S: EmulatorService>(service: S) -> Result<(), ServeError> {
+     let (bind_override, port_override) = cli::listen_overrides();
+     let bind_address = match bind_override {
+@@ -1204,6 +1207,7 @@ pub async fn serve_production<S: EmulatorService>(service: S) -> Result<(), Serv
+ /// [`serve_production`] and set [`BIND_ADDRESS_ENV`] in the task definition. This
+ /// is the out-of-process counterpart to [`serve_on_ephemeral_port`], which binds
+ /// a loopback ephemeral port for in-process tests.
++#[cfg(not(target_family = "wasm"))]
+ pub async fn serve_production_on<S: EmulatorService>(
+     service: S,
+     data_port: u16,
+@@ -1221,6 +1225,7 @@ pub async fn serve_production_on<S: EmulatorService>(
+ /// because the emulator authenticates nothing and holds whatever state its
+ /// callers created). [`serve_production`] resolves this from
+ /// [`BIND_ADDRESS_ENV`].
++#[cfg(not(target_family = "wasm"))]
+ pub async fn serve_production_on_address<S: EmulatorService>(
+     service: S,
+     bind_address: IpAddr,
+@@ -1379,6 +1384,7 @@ const DATA_LISTENER_ALPN: &[&[u8]] = &[b"http/1.1"];
+ 
+ /// The rustls server config for the data listener: the process certificate `ca`, no
+ /// client auth, and [`DATA_LISTENER_ALPN`].
++#[cfg(not(target_family = "wasm"))]
+ fn data_listener_tls_config(
+     ca: &TlsCertificateAuthority,
+ ) -> Result<Arc<rustls::ServerConfig>, rustls::Error> {
+@@ -1400,7 +1406,7 @@ fn shared_config_text(endpoint_url: &str, ca_file: &std::path::Path) -> String {
+ /// emulator cleanly instead of by the signal's default action. Each signal is listened for on its
+ /// own, so one that cannot be registered does not disable the other. The returned future
+ /// completes once one arrives, even if it arrived before the future was polled.
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_family = "wasm")))]
+ fn shutdown_signal() -> impl std::future::Future<Output = ()> {
+     use tokio::signal::unix::{signal, SignalKind};
+     let terminate = signal(SignalKind::terminate()).ok();
+@@ -1414,7 +1420,7 @@ fn shutdown_signal() -> impl std::future::Future<Output = ()> {
+ }
+ 
+ /// Completes when `listening` receives its signal; never, when it could not be registered.
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_family = "wasm")))]
+ async fn signal_received(listening: Option<tokio::signal::unix::Signal>) {
+     match listening {
+         Some(mut listening) => drop(listening.recv().await),
+@@ -1423,7 +1429,7 @@ async fn signal_received(listening: Option<tokio::signal::unix::Signal>) {
+ }
+ 
+ /// [`shutdown_signal`] where only Ctrl+C exists.
+-#[cfg(not(unix))]
++#[cfg(all(not(unix), not(target_family = "wasm")))]
+ fn shutdown_signal() -> impl std::future::Future<Output = ()> {
+     async {
+         let _ = tokio::signal::ctrl_c().await;
+@@ -1994,6 +2000,7 @@ pub fn sigv4_credential_scope(headers: &http::HeaderMap) -> Option<SigV4Scope> {
+ /// // `smithy_server_runtime::MultiServiceRouter` assembled from the mounted services.
+ /// serve_emulator(router).await;
+ /// ```
++#[cfg(not(target_family = "wasm"))]
+ pub async fn serve_emulator<R: EmulatorService>(router: R) -> ! {
+     match serve_emulator_until_shutdown(router).await {
+         Ok(()) => std::process::exit(0),
+@@ -2011,6 +2018,7 @@ pub async fn serve_emulator<R: EmulatorService>(router: R) -> ! {
+ /// gets control back after a shutdown signal (Ctrl+C / SIGTERM) or a serve
+ /// error — the seam a generated `main.rs` needs to run bounded cleanup such
+ /// as a final telemetry flush before the process exits.
++#[cfg(not(target_family = "wasm"))]
+ pub async fn serve_emulator_until_shutdown<R: EmulatorService>(
+     router: R,
+ ) -> Result<(), ServeError> {
+@@ -2020,6 +2028,7 @@ pub async fn serve_emulator_until_shutdown<R: EmulatorService>(
+ /// [`serve_emulator_until_shutdown`] with explicit bind address and port
+ /// (bypassing the `EMULATOR_*` environment), for tests and embedders
+ /// that manage their own port allocation.
++#[cfg(not(target_family = "wasm"))]
+ pub async fn serve_emulator_on<R: EmulatorService>(
+     router: R,
+     bind_address: IpAddr,
+@@ -2030,6 +2039,7 @@ pub async fn serve_emulator_on<R: EmulatorService>(
+ 
+ /// Telemetry reports a serve that ended in an error before it was ready as a
+ /// failed startup; an error after ready leaves the startup outcome as it is.
++#[cfg(not(target_family = "wasm"))]
+ fn reporting_startup_failure(result: Result<(), ServeError>) -> Result<(), ServeError> {
+     if result.is_err()
+         && let Some(telemetry) = emulator_telemetry::global()
+diff --git a/vendor/server/src/listeners.rs b/vendor/server/src/listeners.rs
+index 816bea9a9..ef6be1f1b 100644
+--- a/vendor/server/src/listeners.rs
++++ b/vendor/server/src/listeners.rs
+@@ -85,6 +85,7 @@ fn bind_std(bind_ip: IpAddr, range: PortRange) -> Result<std::net::TcpListener,
+ }
+ 
+ /// Async sibling of [`bind_std`] for the native (`tcp`) path.
++#[cfg(not(target_family = "wasm"))]
+ async fn bind_tokio(bind_ip: IpAddr, range: PortRange) -> Result<tokio::net::TcpListener, SurfaceError> {
+     match range {
+         PortRange::Ephemeral => tokio::net::TcpListener::bind((bind_ip, 0))
+@@ -279,8 +280,18 @@ impl TlsUpgrader {
+     }
+ }
+ 
++#[cfg(target_family = "wasm")]
++async fn serve_native<H: NativeHandler>(
++    _handler: H,
++    _idle: Duration,
++    _tls: Option<tokio_rustls::TlsAcceptor>,
++) -> Result<ResourceListener, SurfaceError> {
++    Err(SurfaceError::Bind("network listeners are unavailable in the wasm build".to_string()))
++}
++
+ /// The accept loop shared by [`Listeners::tcp`] (`tls = Some`) and
+ /// [`Listeners::tcp_plaintext`] (`tls = None`).
++#[cfg(not(target_family = "wasm"))]
+ async fn serve_native<H: NativeHandler>(
+     handler: H,
+     idle: Duration,
+@@ -373,11 +384,21 @@ async fn serve_native<H: NativeHandler>(
+ }
+ 
+ impl Listeners {
++    #[cfg(target_family = "wasm")]
++    pub async fn http<H: HttpHandler>(
++        &self,
++        _handler: H,
++        _policy: HttpPolicy,
++    ) -> Result<ResourceListener, SurfaceError> {
++        Err(SurfaceError::Bind("network listeners are unavailable in the wasm build".to_string()))
++    }
++
+     /// Open an HTTP listener, TLS, on the configured interface
+     /// (`EMULATOR_BIND_ADDRESS`, loopback by default) and a port from
+     /// `EMULATOR_LISTENER_PORT_RANGE` (OS-assigned when unset). The core
+     /// runs the browser check (Origin / `Sec-Fetch-Site`), refuses WebSocket
+     /// upgrades with 501, and owns all CORS headers before calling `handler`.
++    #[cfg(not(target_family = "wasm"))]
+     pub async fn http<H: HttpHandler>(
+         &self,
+         handler: H,
+@@ -707,6 +728,7 @@ pub struct ResourceListener {
+ }
+ 
+ enum Shutdown {
++    #[cfg(not(target_family = "wasm"))]
+     Http(axum_server::Handle),
+     Tcp { accept: tokio::task::AbortHandle, cancel: watch::Sender<bool> },
+ }
+@@ -754,6 +776,7 @@ impl Drop for ResourceListener {
+     fn drop(&mut self) {
+         match &self.shutdown {
+             // Non-graceful: stops serving and drops in-flight HTTP connections.
++            #[cfg(not(target_family = "wasm"))]
+             Shutdown::Http(h) => h.shutdown(),
+             // Signal cancel (severs in-flight connections) and stop accepting.
+             Shutdown::Tcp { accept, cancel } => {
+diff --git a/vendor/smithy-server-runtime/Cargo.toml b/vendor/smithy-server-runtime/Cargo.toml
+index 5de7ee236..034e58d02 100644
+--- a/vendor/smithy-server-runtime/Cargo.toml
++++ b/vendor/smithy-server-runtime/Cargo.toml
+@@ -9,7 +9,6 @@ license = "Apache-2.0"
+ smithy-macros = { path = "../smithy-macros", package = "aws-emulator-smithy-macros", version = "*" }
+ aws-smithy-schema-server = { path = "../smithy-schema-server", package = "aws-emulator-smithy-schema-server", version = "*" }
+ aws-smithy-schema = "0.2.1"
+-axum = "0.7"
+ http = "1"
+ http-body-util = "0.1"
+ aws-smithy-runtime-api = "1"
+@@ -18,3 +17,9 @@ bytes = "1"
+ emulator-server = { path = "../server", package = "aws-emulator-server", version = "*" }
+ emulator-telemetry = { path = "../emulator-telemetry", package = "aws-emulator-emulator-telemetry", version = "*" }
+ uuid = { version = "1", features = ["v4"] }
++
++[target.'cfg(not(target_family = "wasm"))'.dependencies]
++axum = "0.7"
++
++[target.'cfg(target_family = "wasm")'.dependencies]
++axum = { version = "0.7", default-features = false, features = ["form", "http1", "json", "matched-path", "original-uri", "query", "tower-log", "tracing"] }

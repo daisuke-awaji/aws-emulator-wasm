@@ -60,7 +60,8 @@ flowchart LR
 
 | Phase | 内容 | 完了条件 |
 |---|---|---|
-| 0 検証 | DynamoDB とその依存（S3 / KMS / Kinesis / Streams）を wasm 向けに `cargo check` し、壊れる箇所を一覧にする | `docs/phase0-report.md` に、壊れたクレートと理由、対処案がある |
+| 0 検証 ✅ | DynamoDB・SQS とその依存（12 サービス）を wasm 向けに `cargo check` し、壊れる箇所を一覧にする | `docs/phase0-report.md` に、壊れたクレートと理由、対処案がある（2026-11-15 完了：パッチ 7 か所で exit 0） |
+| 0.5 ビルドと実行 | host クレートと自前の router を作り、`.wasm` をビルドして Node の WASI → ブラウザで往復させる | CreateTable・PutItem・GetItem・SendMessage が往復する。サイズを計測 |
 | 1 最小動作 | DynamoDB・S3・SQS を Worker で動かし、MSW から使う Todo デモを GitHub Pages に公開 | ブラウザで CRUD が通る。Playwright のテストが緑 |
 | 2 実用化 | スナップショット、複数タブ、wasm のサイズ削減、読み込みの遅延 | リロード後も状態が残る。初回読み込みの目標サイズ（Phase 1 で計測して決める） |
 | 3 拡張 | Lambda（Python から）、Cognito など | 選んだサービスの代表的な操作が通る |
