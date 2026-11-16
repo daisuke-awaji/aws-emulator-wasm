@@ -122,7 +122,7 @@ Pixel 7 は Playwright のデバイス設定（画面サイズとタッチ）で
 | 通信先のホスト | `daisuke-awaji.github.io` だけ | 同じ |
 | ページの例外 | 0 件 | 0 件 |
 
-公開サイトの画面（左：デスクトップ、右：Pixel 7。起動直後。2026-11-16 に構成図をアイコン付きに更新した後の画面）：
+公開サイトの画面（左：デスクトップ、右：Pixel 7。ダークモードで Todo を 1 件追加した後。2026-11-16 に Vercel 風の画面へ更新した後）：
 
 <img src="./img/pages-desktop.png" alt="Todo デモ（デスクトップ）" width="560"> <img src="./img/pages-mobile.png" alt="Todo デモ（Pixel 7）" width="220">
 
