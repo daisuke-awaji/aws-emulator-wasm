@@ -1,7 +1,7 @@
 // The page's only way to the REST API. In the emulator build the path is relative to the
 // page (MSW answers it); in the AWS build it goes to VITE_API_URL with the user's token.
 import { has, t } from './i18n.js';
-import { API_URL } from './target.js';
+import { API_URL, TARGET } from './target.js';
 
 let accessToken = async () => undefined;
 let onUnauthorized = () => {};
@@ -31,7 +31,9 @@ export async function call(path, { method = 'GET', json, text } = {}) {
     if (res.status === 401) onUnauthorized();
     // The API answers { code, message, ...params }; show the code's message in the page's language.
     const body = await res.json().catch(() => ({}));
-    if (body.code && has(`api.${body.code}`)) throw new Error(t(`api.${body.code}`, body));
+    // The AWS build has its own wording where the emulator's would be wrong (aws.api.*).
+    const key = [`${TARGET}.api.${body.code}`, `api.${body.code}`].find((k) => body.code && has(k));
+    if (key) throw new Error(t(key, body));
     throw new Error(body.message ?? `${method} api/${path}: ${res.status}`);
   }
   if (res.status === 204) return null;

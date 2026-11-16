@@ -186,7 +186,13 @@ function Page() {
             <div className="spinner" aria-hidden="true" />
             <div>
               <p>
-                {t('boot.loading')} <span className="mono">{t('seconds', elapsed.toFixed(1))}</span>
+                {aws ? (
+                  t('aws.loading')
+                ) : (
+                  <>
+                    {t('boot.loading')} <span className="mono">{t('seconds', elapsed.toFixed(1))}</span>
+                  </>
+                )}
               </p>
               {!aws && <p className="muted">{t('boot.firstTime')}</p>}
             </div>
@@ -194,7 +200,7 @@ function Page() {
         )}
         {state === 'failed' && lock !== 'lost' && (
           <section className="card error-box" role="alert">
-            <h2>{t('boot.failed')}</h2>
+            <h2>{t(aws ? 'aws.failed' : 'boot.failed')}</h2>
             <pre>{boot.message}</pre>
           </section>
         )}
