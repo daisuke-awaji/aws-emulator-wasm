@@ -7,6 +7,10 @@
 Kept to what a reader takes in at a glance: large icons and type, one corner radius for
 every frame and box, and straight lines only. The file-by-file view is architecture.drawio.
 
+NOTE: docs/architecture/how-it-works.drawio has been edited by hand since; it is now the
+source. Running this script overwrites those edits. Edit the .drawio in draw.io and
+export it with the export command below.
+
 usage: python3 scripts/how_it_works.py
   -> docs/architecture/how-it-works.drawio
 Then lint and export with the drawio-diagram skill:
