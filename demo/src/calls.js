@@ -1,6 +1,7 @@
-// A log of the SDK calls the emulator answered, for the "SDK の呼び出し" panel.
+// A log of the SDK calls the emulator answered, for the "SDK calls" panel (CallLog.jsx).
 // Each call is tagged with the REST API request (MSW handler) that made it, and with the
 // SDK execution behind it: client, command, input and output (see instrument()).
+import { t } from './i18n.js';
 
 const KEEP = 500;
 const log = [];
@@ -20,18 +21,18 @@ export function snapshot(value, depth = 0) {
   if (value === null || value === undefined) return value ?? null;
   if (typeof value === 'string') {
     const chars = [...value];
-    return chars.length > MAX_STRING ? `${chars.slice(0, MAX_STRING).join('')}…（全 ${chars.length} 文字）` : value;
+    return chars.length > MAX_STRING ? t('snap.chars', chars.slice(0, MAX_STRING).join(''), chars.length) : value;
   }
   if (typeof value === 'number' || typeof value === 'boolean') return value;
   if (typeof value === 'bigint') return value.toString();
   if (value instanceof Date) return value.toISOString();
-  if (value instanceof Uint8Array) return `<${value.byteLength} バイト>`;
-  if (typeof value.transformToString === 'function' || value instanceof ReadableStream || value instanceof Blob) return '<Body（ストリーム）>';
+  if (value instanceof Uint8Array) return t('snap.bytes', value.byteLength);
+  if (typeof value.transformToString === 'function' || value instanceof ReadableStream || value instanceof Blob) return t('snap.stream');
   if (depth >= 6) return '…';
   if (value instanceof Set) value = [...value];
   if (Array.isArray(value)) {
     const out = value.slice(0, MAX_ITEMS).map((v) => snapshot(v, depth + 1));
-    if (value.length > MAX_ITEMS) out.push(`…ほか ${value.length - MAX_ITEMS} 件`);
+    if (value.length > MAX_ITEMS) out.push(t('snap.more', value.length - MAX_ITEMS));
     return out;
   }
   if (typeof value === 'object') {

@@ -144,90 +144,90 @@ def edge(src, s_side, dst, d_side, at, text=None, kind='call', pos=0.0):
 
 
 # ---------------------------------------------------------------- build and delivery
-box('upstream', 470, 20, 360, 64, '上流 aws/aws-emulator', 'Rust・commit 813af48 に固定（このリポジトリには含めない）', 'rust')
-box('repo', 40, 120, 330, 100, 'このリポジトリ', 'scripts/・patches/・crates/wasm-host・js/・demo/', 'github')
-box('build', 470, 120, 360, 100, 'CI: build ジョブ', 'fetch-upstream.sh（sparse checkout）→ patch_wasm.py → cargo build --target wasm32-wasip1 → wasm-opt -Oz → Node テスト', 'actions')
-box('bjob', 930, 120, 330, 100, 'CI: browser ジョブ', 'vite build（BASE_PATH=/aws-emulator-wasm/）→ Playwright（Chromium、デスクトップとスマートフォン）', 'actions')
-box('deploy', 1360, 120, 330, 100, 'CI: deploy ジョブ', 'actions/deploy-pages', 'actions')
-box('pages', 40, 270, 1660, 56, 'GitHub Pages', '静的ファイルを配るだけ。API のサーバーはありません', 'pages')
+box('upstream', 470, 20, 360, 64, 'Upstream aws/aws-emulator', 'Rust, pinned to commit 813af48 (not vendored here)', 'rust')
+box('repo', 40, 120, 330, 100, 'This repository', 'scripts/, patches/, crates/wasm-host, js/, demo/', 'github')
+box('build', 470, 120, 360, 100, 'CI: build job', 'fetch-upstream.sh (sparse checkout) → patch_wasm.py → cargo build --target wasm32-wasip1 → wasm-opt -Oz → Node tests', 'actions')
+box('bjob', 930, 120, 330, 100, 'CI: browser job', 'vite build (BASE_PATH=/aws-emulator-wasm/) → API tests → Playwright (Chromium, desktop and mobile)', 'actions')
+box('deploy', 1360, 120, 330, 100, 'CI: deploy job', 'actions/deploy-pages', 'actions')
+box('pages', 40, 270, 1660, 56, 'GitHub Pages', 'Static files only. There is no API server', 'pages')
 
 # ---------------------------------------------------------------- the browser
-container('browser', 20, 370, 1700, 1390, 'ブラウザ（1 つのタブ）', '#a3a3a3', '#fafafa')
-container('main', 50, 420, 730, 1320, 'メインスレッド', '#3b82f6', '#eff6ff')
+container('browser', 20, 370, 1700, 1390, 'Browser (one tab)', '#a3a3a3', '#fafafa')
+container('main', 50, 420, 730, 1320, 'Main thread', '#3b82f6', '#eff6ff')
 container('swlane', 800, 420, 260, 250, 'Service Worker', '#ff6a33', '#fff4ed')
-container('worker', 800, 1040, 905, 700, 'Web Worker（name: aws-emulator）', '#7c3aed', '#f5f3ff')
+container('worker', 800, 1040, 905, 700, 'Web Worker (name: aws-emulator)', '#7c3aed', '#f5f3ff')
 
 # main thread
-box('react', 100, 480, 440, 80, 'React の画面', 'App.jsx・CallLog.jsx・Architecture.jsx', 'react', code="fetch('api/todos', …)")
-box('handlers', 100, 590, 620, 80, 'MSW のハンドラ（mocks/handlers.js）', 'main.jsx の setupWorker(...handlers) で登録。route() が入力の検査とエラーを HTTP の応答に変える', 'msw')
-box('backend', 100, 710, 440, 80, 'backend.js（Lambda の代わり）', '初回だけ ensureSetup()：テーブル・バケット・キューと初期データ', 'js', code='list・create・update・remove・getNote・putNote・drainActivity')
-box('sdk', 100, 830, 440, 110, 'AWS SDK v3 のクライアント（emulator.js）', 'ミドルウェア：直列化 → SigV4 署名（ダミーの鍵）→ 再試行なし（maxAttempts: 1）', 'js', code='DynamoDBClient + DocumentClient・S3Client・SQSClient')
-box('wrh', 100, 980, 440, 80, 'WasmRequestHandler（js/src/handler.mjs）', 'SDK の requestHandler を差し替え、HTTP に出さずに渡す', 'js', code='HttpRequest → { method, url, headers, body }')
-box('calls', 560, 980, 160, 80, 'calls.js', '呼び出しのログ（API ごとに印を付ける）', None)
-box('client', 100, 1100, 620, 100, 'createEmulator（js/src/browser/index.mjs）', '要求に番号を付け、Worker の応答を待つ（pending）。stats（requests・skippedMs）と onCall', 'js', code='codec.mjs: u32 個数 + (u32 長さ, バイト列) × n')
+box('react', 100, 480, 440, 80, 'React UI', 'App.jsx, CallLog.jsx, Architecture.jsx', 'react', code="fetch('api/todos', …)")
+box('handlers', 100, 590, 620, 80, 'MSW handlers (mocks/handlers.js)', 'Registered by setupWorker(...handlers) in main.jsx. Hands api/* to the Hono app as is: app.fetch(request)', 'msw')
+box('backend', 100, 710, 440, 80, 'Hono API (demo/api/, same code as the Web Function)', 'app.js: routes and errors. todos.js: SDK calls. provision.js: resources and seeds, once', 'js', code='createApp({ docs, s3, sqs, table, bucket, queueUrl })')
+box('sdk', 100, 830, 440, 110, 'AWS SDK v3 clients (emulator.js)', 'Middleware: serialize → SigV4 sign (dummy keys) → no retries (maxAttempts: 1)', 'js', code='DynamoDBClient + DocumentClient, S3Client, SQSClient')
+box('wrh', 100, 980, 440, 80, 'WasmRequestHandler (js/src/handler.mjs)', 'Replaces the SDK requestHandler; nothing goes out over HTTP', 'js', code='HttpRequest → { method, url, headers, body }')
+box('calls', 560, 980, 160, 80, 'calls.js', 'Call log, tagged by API route', None)
+box('client', 100, 1100, 620, 100, 'createEmulator (js/src/browser/index.mjs)', 'Numbers each request and waits for the Worker (pending). stats (requests, skippedMs) and onCall', 'js', code='codec.mjs: u32 count + (u32 length, bytes) × n')
 
 # service worker
-box('sw', 820, 480, 220, 170, 'mockServiceWorker.js', 'ページの fetch を横取りし、MessageChannel でページの MSW に渡す。応答はページから返す', 'msw')
+box('sw', 820, 480, 220, 170, 'mockServiceWorker.js', 'Intercepts the page fetch and passes it to MSW in the page over a MessageChannel; the page answers', 'msw')
 
 # web worker
-box('wjs', 880, 1100, 240, 100, 'worker.mjs + core.mjs', 'init：compileStreaming → instantiate。request：handleFrame() を 1 件ずつ順に', 'wasm')
-box('wasi', 880, 1290, 240, 140, 'wasi.mjs（WASI シム）', '仮想時計：sleep で待たずに時計を進める。fd_write → onLog。random_get。ファイルはなし（ENOSYS）', 'js')
-container('wasm', 1160, 1070, 530, 650, 'aws-emulator.wasm（crates/wasm-host、Rust → wasm32-wasip1）', '#654ff0', '#ffffff', dashed=True, img='wasm')
-box('abi', 1190, 1100, 470, 100, 'C ABI（lib.rs）', '要求の frame を書き込み → 処理 → 応答の frame を読む。tick で後回しのタスクを進める', 'rust', code='emu_alloc → emu_handle → emu_response_ptr / _len → emu_tick')
-box('runtime', 1190, 1240, 470, 90, 'decode_request と tokio', 'http::Request を作り、current_thread の runtime で block_on', 'rust')
-box('router', 1190, 1370, 470, 80, 'MultiServiceRouter（smithy-server-runtime）', 'X-Amz-Target と URL でサービスを選ぶ。署名は確かめない', 'rust')
+box('wjs', 880, 1100, 240, 100, 'worker.mjs + core.mjs', 'init: compileStreaming → instantiate. request: handleFrame(), one at a time', 'wasm')
+box('wasi', 880, 1290, 240, 140, 'wasi.mjs (WASI shim)', 'Virtual clock: sleep advances time instead of waiting. fd_write → onLog. random_get. No files (ENOSYS)', 'js')
+container('wasm', 1160, 1070, 530, 650, 'aws-emulator.wasm (crates/wasm-host, Rust → wasm32-wasip1)', '#654ff0', '#ffffff', dashed=True, img='wasm')
+box('abi', 1190, 1100, 470, 100, 'C ABI (lib.rs)', 'Write the request frame → handle → read the response frame. tick runs deferred tasks', 'rust', code='emu_alloc → emu_handle → emu_response_ptr / _len → emu_tick')
+box('runtime', 1190, 1240, 470, 90, 'decode_request and tokio', 'Builds an http::Request and runs it with block_on on a current_thread runtime', 'rust')
+box('router', 1190, 1370, 470, 80, 'MultiServiceRouter (smithy-server-runtime)', 'Picks the service by X-Amz-Target and URL. Signatures are not checked', 'rust')
 container('svcs', 1190, 1485, 470, 125, 'EmulatedService × 13', '#c4b5fd', '#faf5ff')
-box('ddb', 1205, 1522, 120, 72, 'DynamoDB', 'Todo', 'dynamodb', small=True)
-box('s3', 1333, 1522, 86, 72, 'S3', 'メモ', 's3', small=True)
-box('sqs', 1427, 1522, 104, 72, 'SQS', '変更の記録', 'sqs', small=True)
-box('others', 1539, 1522, 110, 72, 'ほか 10', 'STS・IAM・KMS ほか（依存先）', small=True)
-box('engine', 1190, 1640, 470, 60, 'InMemoryEngine', '状態はメモリの中だけ。再読み込みで消える', 'rust')
+box('ddb', 1205, 1522, 120, 72, 'DynamoDB', 'Todos', 'dynamodb', small=True)
+box('s3', 1333, 1522, 86, 72, 'S3', 'Notes', 's3', small=True)
+box('sqs', 1427, 1522, 104, 72, 'SQS', 'Change log', 'sqs', small=True)
+box('others', 1539, 1522, 110, 72, '10 more', 'STS, IAM, KMS… (dependencies)', small=True)
+box('engine', 1190, 1640, 470, 60, 'InMemoryEngine', 'State lives in wasm memory (snapshotted to OPFS with persist)', 'rust')
 
 # notes
 note('legend', 1170, 420, 520, 250,
-     '<b style="font-size:13px">凡例</b><br>'
-     '<span style="color:#171717">━━▶</span> 呼び出し（応答は同じ道を逆にたどる）<br>'
-     '<span style="color:#8f8f8f">╍╍▶</span> 静的ファイルの配信<br>'
-     '<span style="color:#8f8f8f">━━▶</span> CI の流れ<br>'
-     '<span style="color:#0068d6">┈┈▶</span> 呼び出しのログ（画面の「SDK の呼び出し」）<br><br>'
-     '<b>色</b>：<span style="color:#3b82f6">青</span> メインスレッド　<span style="color:#ff6a33">橙</span> Service Worker　'
-     '<span style="color:#7c3aed">紫</span> Web Worker<br><br>'
-     'ネットワークに出るのは静的ファイルの取得だけです。DynamoDB・S3・SQS への呼び出しは、すべて同じタブの中で終わります。')
+     '<b style="font-size:13px">Legend</b><br>'
+     '<span style="color:#171717">━━▶</span> Call (the response takes the same path back)<br>'
+     '<span style="color:#8f8f8f">╍╍▶</span> Static file delivery<br>'
+     '<span style="color:#8f8f8f">━━▶</span> CI flow<br>'
+     '<span style="color:#0068d6">┈┈▶</span> Call log (the “SDK calls” panel)<br><br>'
+     '<b>Colors</b>: <span style="color:#3b82f6">blue</span> main thread, <span style="color:#ff6a33">orange</span> Service Worker, '
+     '<span style="color:#7c3aed">purple</span> Web Worker<br><br>'
+     'Only the static files come over the network. Every call to DynamoDB, S3 and SQS stays inside the tab.')
 note('facts', 1170, 700, 520, 310,
-     '<b style="font-size:13px">数字で見る</b><br>'
-     '・wasm：約 27 MB。GitHub Pages は gzip で約 9 MB を送る<br>'
-     '・起動時の準備で SDK を 13 回呼ぶ（テーブル・バケット・キューの作成と初期データ 3 件、最初の一覧と変更の記録）<br>'
-     '・Todo を 1 件追加すると SDK を 6 回呼ぶ<br>'
-     '　PutItem・SendMessage（追加）<br>'
-     '　Scan（一覧の読み直し）<br>'
-     '　ReceiveMessage・DeleteMessageBatch・ReceiveMessage（変更の記録を空になるまで受信）<br>'
-     '・CreateTable の直後の DescribeTable は、3 秒の CREATING を仮想時計で飛ばす')
+     '<b style="font-size:13px">By the numbers</b><br>'
+     '• wasm: about 27 MB; GitHub Pages sends about 9 MB with gzip<br>'
+     '• Start-up makes 13 SDK calls (table, bucket, queue, 3 seed todos, then the first list and change log)<br>'
+     '• Adding a todo makes 6 SDK calls:<br>'
+     '&nbsp;&nbsp;PutItem, SendMessage (the change)<br>'
+     '&nbsp;&nbsp;Scan (reload the list)<br>'
+     '&nbsp;&nbsp;ReceiveMessage, DeleteMessageBatch, ReceiveMessage (drain the change log)<br>'
+     '• DescribeTable right after CreateTable skips the 3-second CREATING state on the virtual clock')
 note('steps', 90, 1250, 650, 470,
-     '<b style="font-size:13px">Todo を 1 件追加したときの流れ</b><br><br>'
-     '1. React が <code>POST api/todos</code> を fetch する<br>'
-     '2. Service Worker が横取りし、ページの MSW に渡す<br>'
-     '3. MSW のハンドラが <code>backend.create()</code> を呼ぶ<br>'
-     '4. backend.js が SDK で PutItem（DynamoDB）と SendMessage（SQS）を送る<br>'
-     '5. SDK が要求を直列化・署名し、WasmRequestHandler に渡す<br>'
-     '6. createEmulator が frame に詰め、postMessage で Worker に移す<br>'
-     '7. worker.mjs が C ABI（emu_handle）を呼び、wasm の中の router がサービスへ振り分ける<br>'
-     '8. 応答の frame が同じ道を逆に戻り、fetch の Response になる<br>'
-     '9. 画面は一覧（GET api/todos）と変更の記録（GET api/activity）を読み直す<br>'
-     '10. 最後に GET api/emulator で、呼び出しの回数とログを受け取る', fill='#ffffff')
+     '<b style="font-size:13px">What happens when you add a todo</b><br><br>'
+     '1. React fetches <code>POST api/todos</code><br>'
+     '2. The Service Worker intercepts it and passes it to MSW in the page<br>'
+     '3. The MSW handler calls the Hono app: <code>app.fetch(request)</code><br>'
+     '4. api/todos.js sends PutItem (DynamoDB) and SendMessage (SQS) with the SDK<br>'
+     '5. The SDK serializes and signs the request and hands it to WasmRequestHandler<br>'
+     '6. createEmulator packs it into a frame and transfers it to the Worker<br>'
+     '7. worker.mjs calls the C ABI (emu_handle); the router in the wasm dispatches it<br>'
+     '8. The response frame goes back the same way and becomes the fetch Response<br>'
+     '9. The page reloads the list (GET api/todos) and the change log (GET api/activity)<br>'
+     '10. Finally, GET api/emulator returns the call count and the call log', fill='#ffffff')
 
 # ---------------------------------------------------------------- arrows
 edge('upstream', 'bottom', 'build', 'top', 650, 'sparse checkout', 'ci')
 edge('repo', 'right', 'build', 'left', 170, 'push', 'ci')
 edge('build', 'right', 'bjob', 'left', 170, 'wasm', 'ci')
 edge('bjob', 'right', 'deploy', 'left', 170, 'demo/dist', 'ci')
-edge('deploy', 'bottom', 'pages', 'top', 1525, '公開', 'ci')
+edge('deploy', 'bottom', 'pages', 'top', 1525, 'publish', 'ci')
 
-edge('pages', 'bottom', 'react', 'top', 320, 'index.html・assets/*.js・フォント', 'deliver')
+edge('pages', 'bottom', 'react', 'top', 320, 'index.html, assets/*.js, fonts', 'deliver')
 edge('pages', 'bottom', 'sw', 'top', 930, 'mockServiceWorker.js', 'deliver')
 edge('pages', 'bottom', 'wjs', 'top', 1100, 'aws-emulator.wasm', 'deliver')
 
 edge('react', 'right', 'sw', 'left', 520, "fetch('api/…')")
-edge('sw', 'left', 'handlers', 'right', 630, '転送', pos=0.4)
+edge('sw', 'left', 'handlers', 'right', 630, 'forward', pos=0.4)
 edge('handlers', 'bottom', 'backend', 'top', 320)
 edge('backend', 'bottom', 'sdk', 'top', 320)
 edge('sdk', 'bottom', 'wrh', 'top', 320)
@@ -305,7 +305,7 @@ if problems:
 
 xml = (
     '<mxfile host="aws-emulator-wasm" type="device">'
-    '<diagram id="architecture" name="内部のアーキテクチャ">'
+    '<diagram id="architecture" name="Internal architecture">'
     '<mxGraphModel dx="1800" dy="1800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" '
     'page="0" pageScale="1" pageWidth="1760" pageHeight="1800" math="0" shadow="0" background="#ffffff">'
     '<root><mxCell id="0"/><mxCell id="1" parent="0"/>' + ''.join(cells) + '</root></mxGraphModel></diagram></mxfile>\n'

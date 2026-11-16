@@ -3,23 +3,26 @@ import { Atom, Braces, CloudOff, Cpu, Globe, Radar } from 'lucide-react';
 import dynamodbIcon from './assets/aws/dynamodb.svg';
 import s3Icon from './assets/aws/s3.svg';
 import sqsIcon from './assets/aws/sqs.svg';
+import { t } from './i18n.js';
 
+// role and where are message keys, except where a name needs no translation.
 const STEPS = [
-  { icon: Atom, title: 'React', role: '画面', where: 'メインスレッド' },
-  { icon: Radar, title: 'MSW', role: 'API のモック', where: 'Service Worker' },
-  { icon: Braces, title: 'AWS SDK v3', role: 'MSW のハンドラ', where: 'メインスレッド' },
+  { icon: Atom, title: 'React', role: 'arch.screen', where: 'arch.mainThread' },
+  { icon: Radar, title: 'MSW', role: 'arch.mock', where: 'Service Worker' },
+  { icon: Braces, title: 'Hono + AWS SDK v3', role: 'arch.handlers', where: 'arch.mainThread' },
 ];
-const EDGES = ['fetch', '転送'];
+const EDGES = ['fetch', 'arch.forward'];
 
 const SERVICES = [
-  { icon: dynamodbIcon, name: 'DynamoDB', use: 'Todo' },
-  { icon: s3Icon, name: 'S3', use: 'メモ' },
-  { icon: sqsIcon, name: 'SQS', use: '変更の記録' },
+  { icon: dynamodbIcon, name: 'DynamoDB', use: 'arch.useTodos' },
+  { icon: s3Icon, name: 'S3', use: 'arch.useNotes' },
+  { icon: sqsIcon, name: 'SQS', use: 'arch.useActivity' },
 ];
 
-function Edge({ label, className = '' }) {
+function Edge({ label: key, className = '' }) {
+  const label = t(key);
   return (
-    <li className={`arch-edge ${className}`} aria-label={`${label} で渡す`}>
+    <li className={`arch-edge ${className}`} aria-label={t('arch.passes', label)}>
       <span className="arch-edge-label">{label}</span>
       <span className="arch-edge-line" aria-hidden="true" />
     </li>
@@ -32,13 +35,13 @@ export function Architecture({ state }) {
     <figure className={`arch is-${state}`} aria-labelledby="arch-title">
       <figcaption id="arch-title" className="arch-frame-label">
         <Globe size={14} aria-hidden="true" />
-        ブラウザ
+        {t('arch.browser')}
         <span className="arch-chip">
           <CloudOff size={12} aria-hidden="true" />
-          サーバーなし
+          {t('arch.noServer')}
         </span>
       </figcaption>
-      <ol className="arch-grid" aria-label="構成">
+      <ol className="arch-grid" aria-label={t('arch.label')}>
         {STEPS.map((step, i) => (
           <Step key={step.title} step={step} edge={EDGES[i]} />
         ))}
@@ -49,18 +52,18 @@ export function Architecture({ state }) {
               <Cpu size={20} aria-hidden="true" />
             </span>
             <span className="arch-text">
-              <strong>AWS Emulator（wasm）</strong>
+              <strong>{t('arch.emulator')}</strong>
               <span className="arch-where">Web Worker</span>
             </span>
-            <span className="arch-status" role="img" aria-label={STATUS[state]} title={STATUS[state]} />
+            <span className="arch-status" role="img" aria-label={t(`arch.${state}`)} title={t(`arch.${state}`)} />
           </div>
-          <ul className="arch-services" aria-label="使っているサービス">
+          <ul className="arch-services" aria-label={t('arch.services')}>
             {SERVICES.map((s) => (
               <li key={s.name}>
                 <img src={s.icon} alt="" width="40" height="40" />
                 <span className="arch-text">
                   <strong>{s.name}</strong>
-                  <span className="arch-role">{s.use}</span>
+                  <span className="arch-role">{t(s.use)}</span>
                 </span>
               </li>
             ))}
@@ -70,8 +73,6 @@ export function Architecture({ state }) {
     </figure>
   );
 }
-
-const STATUS = { loading: '読み込み中', ready: '動作中', failed: '起動に失敗' };
 
 function Step({ step, edge }) {
   const Icon = step.icon;
@@ -83,9 +84,9 @@ function Step({ step, edge }) {
         </span>
         <span className="arch-text">
           <strong>{step.title}</strong>
-          <span className="arch-role">{step.role}</span>
+          <span className="arch-role">{t(step.role)}</span>
         </span>
-        <span className="arch-where">{step.where}</span>
+        <span className="arch-where">{t(step.where)}</span>
       </li>
       {edge && <Edge label={edge} />}
     </>

@@ -16,7 +16,7 @@ Point AWS SDK v3 at it and get DynamoDB, S3 and SQS with no server, no Docker an
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/img/readme-dark.png">
-  <img src="./docs/img/readme-light.png" alt="The Todo demo: React talks to MSW, whose handlers call AWS SDK v3, which calls the AWS Emulator running as wasm in a Web Worker. Todos live in DynamoDB, notes in S3 and the change log in SQS." width="900">
+  <img src="./docs/img/readme-light.png" alt="The Todo demo: React talks to MSW, which hands each request to a Hono API using AWS SDK v3, which calls the AWS Emulator running as wasm in a Web Worker. Todos live in DynamoDB, notes in S3 and the change log in SQS." width="900">
 </picture>
 
 </div>
@@ -36,14 +36,22 @@ This project moves the backend into the page. The demo is plain static files on 
 - **No waiting on timers.** A virtual clock skips ahead when the emulator sleeps, for example while a new DynamoDB table "becomes active".
 - **Every call is visible.** `onCall` reports each request with its status and timing. The demo shows them per action: adding a todo is 6 SDK calls.
 
-## Quick start
+## Install
+
+The package is not on the npm registry. Install it from a GitHub release, which has the wasm inside:
+
+```bash
+npm install https://github.com/daisuke-awaji/aws-emulator-wasm/releases/download/v0.1.0/aws-emulator-wasm-0.1.0.tgz
+npm install @aws-sdk/client-dynamodb @aws-sdk/client-s3 @aws-sdk/client-sqs
+```
 
 ```js
 import { DynamoDBClient, ListTablesCommand } from '@aws-sdk/client-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
 import { createEmulator } from 'aws-emulator-wasm/browser';
+import wasmUrl from 'aws-emulator-wasm/aws-emulator.wasm?url'; // Vite
 
-const emulator = createEmulator({ wasmUrl: '/aws-emulator.wasm' });
+const emulator = createEmulator({ wasmUrl, persist: { name: 'my-app' } });
 
 const ddb = new DynamoDBClient(emulator.clientConfig());
 const s3 = new S3Client(emulator.clientConfig({ forcePathStyle: true }));
@@ -51,51 +59,18 @@ const s3 = new S3Client(emulator.clientConfig({ forcePathStyle: true }));
 await ddb.send(new ListTablesCommand({}));
 ```
 
+In Node: `const emulator = await loadEmulator()` from `aws-emulator-wasm/node`, then the same `clientConfig()`.
+
+**[User guide](./js/README.md)**: other bundlers, MSW handlers, persistence and tabs, Node, the full API, limits and troubleshooting.
+
+## The demo
+
+[`demo/`](./demo) is a separate app that uses the package the way any app would: a Todo list whose REST API is a [Hono](https://hono.dev/) app. In the page, MSW hands each request to `app.fetch()`; the API keeps todos in DynamoDB, notes in S3 and a change log in SQS through AWS SDK v3. The SDK call log shows every request with its input and output. The UI is in English and Japanese (the switch in the header, or `?lang=en` / `?lang=ja`).
+
+The API in [`demo/api/`](./demo/api) is written to move to AWS as it is, as a [Lambda Web Function](https://docs.aws.amazon.com/lambda/latest/dg/web-functions.html): Lambda runs the same Hono app as a plain Node.js HTTP server listening on `AWS_LAMBDA_HTTP_ENDPOINT`, with no adapter and no API Gateway. `npm run build:web-function -w demo` builds the package, and CI serves the API over HTTP against the emulator and starts the package the way Lambda does. See [demo/api/README.md](./demo/api/README.md) for deployment, permissions and what changes in production.
+
 > [!NOTE]
-> The package is not on npm yet. Use it from this repository's npm workspace (`js/`), and copy the wasm from the CI artifact `aws-emulator-wasm` (see [Development](#development)).
-
-### Keep state across reloads
-
-```js
-const emulator = createEmulator({
-  wasmUrl: '/aws-emulator.wasm',
-  persist: { name: 'my-app' },
-  onLock: (state) => console.log(state), // 'waiting' | 'held' | 'lost'
-});
-
-const { persistence } = await emulator.ready;
-// { enabled: true, restored: true, savedAt: '2026-11-16T11:26:06.000Z' }
-```
-
-| Event | What happens |
-|---|---|
-| Requests pause for 100 ms | The Worker copies the wasm memory (a few ms) and writes a gzip snapshot to OPFS in the background (about 2.5 MB and 250 ms today). |
-| Page loads | The snapshot is written back before `ready` resolves: tables, objects, queues and in-flight message visibility all carry on. |
-| A new wasm build is deployed | The snapshot belongs to another build, so it is dropped and the emulator starts empty (`discarded: 'version'`). |
-| The tab closes mid-write | Snapshots alternate between two slots, so the previous one is still there (`discarded: 'corrupt'`). |
-| A second tab opens | It waits (`onLock('waiting')`). `takeOver()` moves the emulator to it, and the first tab stops (`'lost'`). |
-
-`flush()` resolves once everything answered so far is saved. `reset()` stops the emulator and deletes the saved state.
-
-> [!WARNING]
-> A tab closed before the last save finishes loses that last action. Browsers may also evict site data under storage pressure, and Safari deletes it after 7 days without use.
-
-### API
-
-| Name | Description |
-|---|---|
-| `createEmulator(options)` | Starts the Worker. `options.wasmUrl` is required. |
-| `options.clock` | `'virtual'` (default) or `'real'`. |
-| `options.persist` | `false` (default) or `{ name, takeOver? }`. |
-| `options.onCall(call)` | `{ seq, method, url, headers, status, ms, startedAt }` for every answered request. |
-| `options.onLock(state)` / `options.onSave(event)` / `options.onLog(stream, line)` | Lock changes, finished saves, and the emulator's stdout and stderr. |
-| `emulator.ready` | Resolves with `stats` once the wasm is instantiated (and restored). |
-| `emulator.clientConfig(overrides?)` | SDK client settings: region, dummy credentials, endpoint and the wasm request handler. |
-| `emulator.fetch(request)` / `emulator.requestHandler` | The same transport, for code that does not use the SDK. |
-| `emulator.stats` | Request count, virtual time skipped, load timings and persistence state. |
-| `emulator.flush()` / `reset()` / `takeOver()` / `terminate()` | See above. |
-
-Node has its own loader: `aws-emulator-wasm/node`.
+> AWS Emulator models Lambda Web Functions (`lambdaweb`) only as a control plane: it stores functions, revisions and endpoints but runs no code (endpoints answer 501). The demo therefore runs the API in the page instead of emulating the Web Function.
 
 ## How it works
 
@@ -137,34 +112,37 @@ bash scripts/fetch-upstream.sh .upstream   # pinned upstream + wasm patches
   cargo build --release --target wasm32-wasip1 -p aws-emulator-wasm-host)
 
 export EMULATOR_WASM=path/to/aws-emulator.opt.wasm
+npm run wasm -w js                # copy the wasm to js/aws-emulator.wasm, where the package exports it
 npm test -w js                    # Node: WASI shim, codec, SDK round trips, snapshots
-npm run wasm -w demo              # copy the wasm into demo/public/
 npm run dev -w demo               # http://localhost:5173/
+npm run test:api -w demo          # the API as an HTTP server, and the Web Function package's start-up
 npx -w demo playwright install chromium
 npm run test:e2e -w demo          # Playwright, desktop and mobile
 ```
 
 C dependencies need `CC_wasm32_wasip1`, `AR_wasm32_wasip1` and `CFLAGS_wasm32_wasip1` pointed at wasi-sdk; the `wasm-opt -Oz` step and the rest are in [`.github/workflows/wasm.yml`](./.github/workflows/wasm.yml). Every push to `main` builds the wasm, runs the Node and Playwright suites, and deploys the demo to Pages.
 
+The demo depends on the package through the npm workspace, so it always runs the code in `js/`.
+
+### Releasing the package
+
+1. Bump `version` in `js/package.json` and commit.
+2. Push a matching tag: `git tag v0.1.0 && git push origin v0.1.0`.
+3. CI packs `js/` with the wasm (`npm pack`), installs the tarball in an empty project as a check, and attaches it to a GitHub release named after the tag.
+
+Every CI run also uploads the tarball as the artifact `aws-emulator-wasm-package`.
+
 ### Layout
 
 ```
 crates/wasm-host/   wasm entry point: router and C ABI
-js/                 WASI shim, browser and Node loaders, SDK request handler, snapshots
-demo/               Vite + React + MSW Todo demo, SDK test page, Playwright tests
+js/                 the aws-emulator-wasm package: WASI shim, browser and Node loaders, SDK request handler, snapshots
+demo/               Vite + React + MSW Todo demo (English and Japanese), SDK test page, Playwright tests
+demo/api/           the demo's Hono API: behind MSW in the page, and as a Lambda Web Function (index.js)
 scripts/            fetch and trim upstream, apply wasm patches, draw the architecture
 patches/            the wasm32 patch set (P1–P4)
-docs/               design notes and phase reports
+docs/               design notes and reports
 ```
-
-## Status
-
-| Phase | Result |
-|---|---|
-| ✅ Phase 0 | Upstream type-checks for `wasm32-wasip1` with a small patch set and wasi-sdk |
-| ✅ Phase 0.5 | The wasm answers AWS SDK v3 in Node |
-| ✅ Phase 1 | Runs in a browser Worker; MSW Todo demo on GitHub Pages |
-| 🚧 Phase 2 | ✅ Snapshots and one-tab locking · ⬜ smaller wasm and faster first load · ⬜ recovery after a panic |
 
 ## Docs
 
@@ -172,7 +150,7 @@ Design notes and reports are written in Japanese.
 
 - [PLAN.md](./PLAN.md): plan, upstream survey, design decisions and risks
 - [docs/persistence-design.md](./docs/persistence-design.md): persistence options, experiments and the chosen design
-- [docs/phase1-report.md](./docs/phase1-report.md), [phase05](./docs/phase05-report.md), [phase0](./docs/phase0-report.md): phase reports
+- [docs/phase1-report.md](./docs/phase1-report.md), [phase05](./docs/phase05-report.md), [phase0](./docs/phase0-report.md): build and porting reports
 - [PROGRESS.md](./PROGRESS.md): work log
 
 ## Upstream

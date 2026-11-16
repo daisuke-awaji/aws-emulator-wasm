@@ -1,7 +1,8 @@
 // Runs the emulator in a Web Worker and gives AWS SDK v3 clients a request handler for it.
 //
 //   import { createEmulator } from 'aws-emulator-wasm/browser';
-//   const emulator = createEmulator({ wasmUrl: '/aws-emulator.wasm' });
+//   import wasmUrl from 'aws-emulator-wasm/aws-emulator.wasm?url'; // Vite; or any URL of the file
+//   const emulator = createEmulator({ wasmUrl });
 //   const ddb = new DynamoDBClient(emulator.clientConfig());
 //
 // Nothing goes over the network except the one download of the wasm file.
@@ -11,7 +12,7 @@
 // load (same wasm build only; another build starts empty). Only one tab at a time runs a
 // persisted emulator of a given name (Web Locks); the others wait, or take it over.
 import { decodeResponse, encodeRequest } from '../codec.mjs';
-import { WasmRequestHandler } from '../handler.mjs';
+import { emulatorClientConfig, WasmRequestHandler } from '../handler.mjs';
 import { deleteSnapshots } from './store.mjs';
 
 /**
@@ -232,14 +233,7 @@ export function createEmulator(options) {
     stats,
     /** Client settings that send every call to this emulator. */
     clientConfig(overrides = {}) {
-      return {
-        region: 'us-east-1',
-        endpoint: 'http://localhost:4566',
-        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-        requestHandler,
-        maxAttempts: 1,
-        ...overrides,
-      };
+      return emulatorClientConfig(requestHandler, overrides);
     },
     /** With `persist`: 'waiting' | 'held' | 'lost' (undefined without Web Locks). */
     get lock() {

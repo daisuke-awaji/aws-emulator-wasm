@@ -3,19 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Architecture } from './Architecture.jsx';
 import { CallLog } from './CallLog.jsx';
 import { emulator, live, reloadAndTakeOver, resetAndReload } from './emulator.js';
+import { has, LANGS, locale, rich, setLang, t, useLang } from './i18n.js';
 
 const REPO = 'https://github.com/daisuke-awaji/aws-emulator-wasm';
 
-const EVENT_LABELS = {
-  created: '追加',
-  completed: '完了',
-  reopened: '未完了に戻す',
-  renamed: '名前を変更',
-  noted: 'メモを更新',
-  deleted: '削除',
-};
-
-const BOOT_STATUS = { loading: '読み込み中', waiting: '待機中', ready: '動作中', failed: '停止' };
+const EVENTS = ['created', 'completed', 'reopened', 'renamed', 'noted', 'deleted'];
 
 /** Calls the mocked REST API (relative to the page, so it works under any base path). */
 async function call(path, { method = 'GET', json, text } = {}) {
@@ -29,7 +21,9 @@ async function call(path, { method = 'GET', json, text } = {}) {
   }
   const res = await fetch(`api/${path}`, init);
   if (!res.ok) {
+    // The API answers { code, message, ...params }; show the code's message in the page's language.
     const body = await res.json().catch(() => ({}));
+    if (body.code && has(`api.${body.code}`)) throw new Error(t(`api.${body.code}`, body));
     throw new Error(body.message ?? `${method} api/${path}: ${res.status}`);
   }
   if (res.status === 204) return null;
@@ -54,9 +48,9 @@ function useLive() {
   return live;
 }
 
-const timeOf = (iso) => new Date(iso).toLocaleTimeString('ja-JP');
+const timeOf = (iso) => new Date(iso).toLocaleTimeString(locale());
 const dateTimeOf = (iso) =>
-  new Date(iso).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  new Date(iso).toLocaleString(locale(), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 function GitHubMark() {
   // Octicons mark-github (MIT).
@@ -67,7 +61,24 @@ function GitHubMark() {
   );
 }
 
+const LANG_NAMES = { en: 'EN', ja: '日本語' };
+
+/** EN | 日本語: switches the page in place (and remembers the choice). */
+function LangSwitch() {
+  const lang = useLang();
+  return (
+    <div className="lang-switch" role="group" aria-label={t('nav.language')}>
+      {LANGS.map((l) => (
+        <button key={l} type="button" lang={l} aria-pressed={l === lang} onClick={() => setLang(l)}>
+          {LANG_NAMES[l]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function App({ mocking, readyIn }) {
+  useLang(); // everything below re-renders in the new language
   const [boot, setBoot] = useState({ state: 'loading' });
   const { lock } = useLive();
   const elapsed = useElapsed(boot.state === 'loading' && lock !== 'waiting');
@@ -84,9 +95,9 @@ export function App({ mocking, readyIn }) {
 
   return (
     <>
-      <nav className="nav" aria-label="サイト">
+      <nav className="nav" aria-label={t('nav.label')}>
         <div className="nav-inner">
-          <a className="brand" href="./" aria-label="aws-emulator-wasm のデモ">
+          <a className="brand" href="./" aria-label={t('nav.home')}>
             <span className="brand-mark" aria-hidden="true">
               <Boxes size={15} strokeWidth={2.25} />
             </span>
@@ -99,12 +110,13 @@ export function App({ mocking, readyIn }) {
           <div className="nav-right">
             <span className={`pill status-${state}`}>
               <span className="dot" aria-hidden="true" />
-              {BOOT_STATUS[state]}
+              {t(`status.${state}`)}
             </span>
             <a className="nav-link" href="sdk.html">
-              SDK テスト
+              {t('nav.sdk')}
             </a>
-            <a className="icon-link" href={REPO} aria-label="GitHub のリポジトリ">
+            <LangSwitch />
+            <a className="icon-link" href={REPO} aria-label={t('nav.repo')}>
               <GitHubMark />
             </a>
           </div>
@@ -113,25 +125,20 @@ export function App({ mocking, readyIn }) {
 
       <div className="page">
         <header className="hero">
-          <p className="eyebrow">すべてブラウザの中で動きます</p>
+          <p className="eyebrow">{t('eyebrow')}</p>
           <h1>Todo</h1>
-          <p className="lead">
-            サーバーなしで動く Todo です。画面の通信は MSW が受け取り、ハンドラが AWS SDK v3 で
-            <strong>ブラウザ内の AWS Emulator（wasm）</strong>を呼びます。Todo は DynamoDB、メモは S3、変更の記録は SQS に入ります。
-          </p>
+          <p className="lead">{rich('lead', (text) => <strong>{text}</strong>)}</p>
         </header>
 
         {/* Cards that need an action come before the diagram, so a phone shows them at once. */}
         {state === 'waiting' && (
           <section className="card boot" role="status" aria-labelledby="waiting-title">
             <div>
-              <h2 id="waiting-title">このデモは別のタブで開いています</h2>
-              <p className="muted">
-                エミュレーターの状態をこのブラウザに保存しているので、同時に動かせるのは 1 つのタブだけです。そのタブを閉じると、ここで始まります。
-              </p>
+              <h2 id="waiting-title">{t('waiting.title')}</h2>
+              <p className="muted">{t('waiting.body')}</p>
               <p>
                 <button type="button" className="btn btn-primary btn-sm" onClick={() => emulator.takeOver()}>
-                  このタブで使う
+                  {t('tab.useHere')}
                 </button>
               </p>
             </div>
@@ -140,11 +147,11 @@ export function App({ mocking, readyIn }) {
         {lock === 'lost' && (
           <section className="card boot" role="alert" aria-labelledby="lost-title">
             <div>
-              <h2 id="lost-title">別のタブで使い始めたので、このタブは止めました</h2>
-              <p className="muted">同時に動かせるのは 1 つのタブだけです。ここに戻すと、もう一方のタブが止まります。</p>
+              <h2 id="lost-title">{t('lost.title')}</h2>
+              <p className="muted">{t('lost.body')}</p>
               <p>
                 <button type="button" className="btn btn-primary btn-sm" onClick={reloadAndTakeOver}>
-                  このタブで使う
+                  {t('tab.useHere')}
                 </button>
               </p>
             </div>
@@ -157,26 +164,24 @@ export function App({ mocking, readyIn }) {
             <div className="spinner" aria-hidden="true" />
             <div>
               <p>
-                エミュレーターを読み込んでいます… <span className="mono">{elapsed.toFixed(1)} 秒</span>
+                {t('boot.loading')} <span className="mono">{t('seconds', elapsed.toFixed(1))}</span>
               </p>
-              <p className="muted">初回は wasm（約 9 MB、圧縮後）をダウンロードします。</p>
+              <p className="muted">{t('boot.firstTime')}</p>
             </div>
           </section>
         )}
         {state === 'failed' && lock !== 'lost' && (
           <section className="card error-box" role="alert">
-            <h2>エミュレーターを起動できませんでした</h2>
+            <h2>{t('boot.failed')}</h2>
             <pre>{boot.message}</pre>
           </section>
         )}
         {state === 'ready' && <Todos bootMs={boot.ms} persistence={boot.persistence} />}
 
         <footer className="footer">
-          <p>
-            状態はこのブラウザの中（OPFS）に保存され、再読み込みしても残ります。サーバーには送りません。「初期状態に戻す」で最初の 3 件に戻ります。
-          </p>
+          <p>{t('footer')}</p>
           <p className="footer-links">
-            <a href="sdk.html">SDK の往復テスト（DynamoDB・S3・SQS）</a>
+            <a href="sdk.html">{t('footer.sdk')}</a>
             <a href={REPO}>
               GitHub
               <ArrowUpRight size={13} aria-hidden="true" />
@@ -203,6 +208,7 @@ function Todos({ bootMs, persistence }) {
   /**
    * Runs one change, then reloads the list and the activity one request after another.
    * The emulator's counter is read last, so it includes every call above.
+   * `label` is [message key, ...args], so the log follows a language switch.
    */
   const run = useCallback(async (label, fn) => {
     setBusy(true);
@@ -232,13 +238,12 @@ function Todos({ bootMs, persistence }) {
   }, []);
 
   useEffect(() => {
-    run(persistence?.restored ? '起動（保存した状態を復元）' : '起動（テーブル・バケット・キューの作成と初期データ）', async () => {});
+    run([persistence?.restored ? 'action.bootRestored' : 'action.bootFresh'], async () => {});
   }, [run, persistence]);
 
   const add = async (event) => {
     event.preventDefault();
-    const label = title.trim() ? `「${title.trim()}」を追加` : 'Todo を追加';
-    if (await run(label, () => call('todos', { method: 'POST', json: { title } }))) {
+    if (await run(['action.add', title.trim()], () => call('todos', { method: 'POST', json: { title } }))) {
       setTitle('');
       input.current?.focus();
     }
@@ -255,25 +260,25 @@ function Todos({ bootMs, persistence }) {
           <h2 id="todos-title">Todos</h2>
           {todos && (
             <p className="count" aria-live="polite">
-              残り {remaining} 件 / 全 {todos.length} 件
+              {t('todos.remaining', remaining, todos.length)}
             </p>
           )}
         </div>
         <form className="add" onSubmit={add}>
           <label htmlFor="new-title" className="visually-hidden">
-            新しい Todo
+            {t('todos.new')}
           </label>
           <input
             id="new-title"
             ref={input}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="新しい Todo を入力"
+            placeholder={t('todos.placeholder')}
             maxLength={200}
             autoComplete="off"
           />
           <button type="submit" className="btn btn-primary" disabled={busy}>
-            追加
+            {t('todos.add')}
             <kbd aria-hidden="true">
               <CornerDownLeft size={12} />
             </kbd>
@@ -287,15 +292,15 @@ function Todos({ bootMs, persistence }) {
         )}
 
         {todos === null ? (
-          <p className="muted pad">読み込み中…</p>
+          <p className="muted pad">{t('todos.loading')}</p>
         ) : (
           <>
-            <ul className="todos" aria-label="Todo の一覧">
+            <ul className="todos" aria-label={t('todos.list')}>
               {todos.map((todo) => (
                 <TodoItem key={todo.id} todo={todo} run={run} busy={busy} />
               ))}
             </ul>
-            {todos.length === 0 && <p className="muted pad">Todo はありません。</p>}
+            {todos.length === 0 && <p className="muted pad">{t('todos.empty')}</p>}
           </>
         )}
       </main>
@@ -304,36 +309,36 @@ function Todos({ bootMs, persistence }) {
         {stats && (
           <section className="card" aria-labelledby="emu-title">
             <div className="card-head">
-              <h2 id="emu-title">エミュレーター</h2>
+              <h2 id="emu-title">{t('emu.title')}</h2>
               <span className="badge">Web Worker</span>
             </div>
-            <dl className="stats" aria-label="エミュレーター">
+            <dl className="stats" aria-label={t('emu.title')}>
               <div>
-                <dt>起動</dt>
+                <dt>{t('emu.boot')}</dt>
                 <dd>
                   {(bootMs / 1000).toFixed(1)}
-                  <small> 秒</small>
+                  <small>{t('unitSeconds')}</small>
                 </dd>
               </div>
               <div>
-                <dt>SDK の呼び出し（累計）</dt>
+                <dt>{t('emu.requests')}</dt>
                 <dd data-testid="requests">
                   {stats.requests}
-                  <small> 回</small>
+                  <small>{t('unitCalls')}</small>
                 </dd>
               </div>
               <div>
-                <dt>直前の操作</dt>
+                <dt>{t('emu.last')}</dt>
                 <dd data-testid="last-calls">
                   {last ? last.calls.length : 0}
-                  <small> 回</small>
+                  <small>{t('unitCalls')}</small>
                 </dd>
               </div>
               <div>
-                <dt>仮想時計で進めた時間</dt>
+                <dt>{t('emu.skipped')}</dt>
                 <dd>
                   {(stats.skippedMs / 1000).toFixed(1)}
-                  <small> 秒</small>
+                  <small>{t('unitSeconds')}</small>
                 </dd>
               </div>
             </dl>
@@ -343,18 +348,18 @@ function Todos({ bootMs, persistence }) {
 
         <section className="card activity" aria-labelledby="activity-title">
           <div className="card-head">
-            <h2 id="activity-title">変更の記録</h2>
-            <span className="badge">SQS から受信</span>
+            <h2 id="activity-title">{t('activity.title')}</h2>
+            <span className="badge">{t('activity.badge')}</span>
           </div>
           {activity.length === 0 ? (
-            <p className="muted pad">まだありません。</p>
+            <p className="muted pad">{t('activity.empty')}</p>
           ) : (
-            <ol aria-label="変更の記録">
+            <ol aria-label={t('activity.title')}>
               {activity.map((e, i) => (
                 <li key={`${e.at}-${e.id}-${i}`}>
-                  <span className={`tag tag-${e.type}`}>{EVENT_LABELS[e.type] ?? e.type}</span>
+                  <span className={`tag tag-${e.type}`}>{EVENTS.includes(e.type) ? t(`event.${e.type}`) : e.type}</span>
                   <span className="event-title">{e.title}</span>
-                  <time dateTime={e.at}>{new Date(e.at).toLocaleTimeString('ja-JP')}</time>
+                  <time dateTime={e.at}>{timeOf(e.at)}</time>
                 </li>
               ))}
             </ol>
@@ -371,12 +376,11 @@ function Todos({ bootMs, persistence }) {
 function PersistNotice({ persistence }) {
   if (!persistence) return null;
   let text;
-  if (!persistence.enabled) text = 'このブラウザでは保存を使えないため、再読み込みすると初期状態に戻ります。';
-  else if (persistence.restored && persistence.discarded === 'corrupt')
-    text = `最後の保存が壊れていたため、1 つ前の状態（${dateTimeOf(persistence.savedAt)} に保存）を復元しました。`;
-  else if (persistence.restored) text = `前回の状態を復元しました（${dateTimeOf(persistence.savedAt)} に保存）。`;
-  else if (persistence.discarded === 'version') text = 'エミュレーターが新しい版になったので、初期状態から始めました。';
-  else if (persistence.discarded === 'corrupt') text = '保存したデータが壊れていたため、初期状態から始めました。';
+  if (!persistence.enabled) text = t('persist.unavailable');
+  else if (persistence.restored && persistence.discarded === 'corrupt') text = t('persist.restoredOlder', dateTimeOf(persistence.savedAt));
+  else if (persistence.restored) text = t('persist.restored', dateTimeOf(persistence.savedAt));
+  else if (persistence.discarded === 'version') text = t('persist.newVersion');
+  else if (persistence.discarded === 'corrupt') text = t('persist.corrupt');
   if (!text) return null;
   return (
     <p className="notice" role="status" data-testid="persist-notice">
@@ -398,32 +402,32 @@ function SaveState({ persistence, busy }) {
     <div className="save-state">
       <p className="save-line" data-testid="last-save" data-requests={lastSave?.requests ?? 0} aria-live="polite">
         {!persistence.enabled
-          ? '保存：使えません'
+          ? t('save.unavailable')
           : saveError
-            ? `保存に失敗しました：${saveError}`
+            ? t('save.failed', saveError)
             : lastSave
-              ? `保存：${timeOf(lastSave.at)}（${(lastSave.bytes / 1024 / 1024).toFixed(1)} MB、${Math.round(lastSave.ms)} ms）`
+              ? t('save.last', timeOf(lastSave.at), (lastSave.bytes / 1024 / 1024).toFixed(1), Math.round(lastSave.ms))
               : persistence.restored
-                ? `保存：${timeOf(persistence.savedAt)}（復元した状態）`
-                : '保存：まだありません'}
+                ? t('save.restored', timeOf(persistence.savedAt))
+                : t('save.none')}
       </p>
       {persistence.enabled &&
         (confirming ? (
-          <div className="confirm" role="group" aria-label="初期状態に戻す">
-            <p>保存したデータを消して、最初の 3 件に戻します。</p>
+          <div className="confirm" role="group" aria-label={t('reset.button')}>
+            <p>{t('reset.confirm')}</p>
             <div className="note-actions">
               <button type="button" className="btn btn-primary btn-sm" onClick={reset} disabled={resetting}>
-                消して戻す
+                {t('reset.yes')}
               </button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(false)} disabled={resetting}>
-                やめる
+                {t('reset.no')}
               </button>
             </div>
           </div>
         ) : (
           <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => setConfirming(true)} disabled={busy}>
             <RotateCcw size={14} aria-hidden="true" />
-            初期状態に戻す
+            {t('reset.button')}
           </button>
         ))}
     </div>
@@ -441,23 +445,21 @@ function TodoItem({ todo, run, busy }) {
   const toggle = async () => {
     const next = !done;
     setDone(next);
-    const label = `「${todo.title}」を${next ? '完了にする' : '未完了に戻す'}`;
-    if (!(await run(label, () => call(`todos/${todo.id}`, { method: 'PATCH', json: { done: next } })))) setDone(todo.done);
+    if (!(await run([next ? 'action.done' : 'action.reopen', todo.title], () => call(`todos/${todo.id}`, { method: 'PATCH', json: { done: next } })))) setDone(todo.done);
   };
 
   const save = async (event) => {
     event.preventDefault();
-    const label = `「${todo.title}」の名前を変更`;
-    if (await run(label, () => call(`todos/${todo.id}`, { method: 'PATCH', json: { title: draft } }))) setEditing(false);
+    if (await run(['action.rename', todo.title], () => call(`todos/${todo.id}`, { method: 'PATCH', json: { title: draft } }))) setEditing(false);
   };
 
   const openNote = () =>
-    run(`「${todo.title}」のメモを開く`, async () => {
+    run(['action.openNote', todo.title], async () => {
       setNote(await call(`todos/${todo.id}/note`));
     });
 
   const saveNote = async () => {
-    if (await run(`「${todo.title}」のメモを保存`, () => call(`todos/${todo.id}/note`, { method: 'PUT', text: note }))) setNote(null);
+    if (await run(['action.saveNote', todo.title], () => call(`todos/${todo.id}/note`, { method: 'PUT', text: note }))) setNote(null);
   };
 
   return (
@@ -468,7 +470,7 @@ function TodoItem({ todo, run, busy }) {
             type="checkbox"
             checked={done}
             disabled={busy}
-            aria-label={`「${todo.title}」を${done ? '未完了に戻す' : '完了にする'}`}
+            aria-label={t(done ? 'todo.markOpen' : 'todo.markDone', todo.title)}
             onChange={toggle}
           />
           <span className="check-box" aria-hidden="true">
@@ -478,11 +480,11 @@ function TodoItem({ todo, run, busy }) {
         {editing ? (
           <form className="edit" onSubmit={save}>
             <label className="visually-hidden" htmlFor={`edit-${todo.id}`}>
-              タイトル
+              {t('todo.titleField')}
             </label>
             <input id={`edit-${todo.id}`} value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={200} autoFocus />
             <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
-              保存
+              {t('todo.save')}
             </button>
             <button
               type="button"
@@ -492,7 +494,7 @@ function TodoItem({ todo, run, busy }) {
                 setEditing(false);
               }}
             >
-              やめる
+              {t('todo.cancel')}
             </button>
           </form>
         ) : (
@@ -507,45 +509,45 @@ function TodoItem({ todo, run, busy }) {
                 setDraft(todo.title);
                 setEditing(true);
               }}
-              aria-label={`「${todo.title}」を編集`}
+              aria-label={t('todo.editLabel', todo.title)}
             >
               <Pencil size={14} aria-hidden="true" />
-              <span className="btn-text">編集</span>
+              <span className="btn-text">{t('todo.edit')}</span>
             </button>
             <button
               type="button"
               className={todo.hasNote ? 'btn btn-ghost btn-sm has-note' : 'btn btn-ghost btn-sm'}
               onClick={note === null ? openNote : () => setNote(null)}
               aria-expanded={note !== null}
-              aria-label={`「${todo.title}」のメモ`}
+              aria-label={t('todo.noteLabel', todo.title)}
             >
               <FileText size={14} aria-hidden="true" />
-              {todo.hasNote ? 'メモあり' : 'メモ'}
+              {t(todo.hasNote ? 'todo.hasNote' : 'todo.note')}
             </button>
             <button
               type="button"
               className="btn btn-ghost btn-sm danger"
               disabled={busy}
-              onClick={() => run(`「${todo.title}」を削除`, () => call(`todos/${todo.id}`, { method: 'DELETE' }))}
-              aria-label={`「${todo.title}」を削除`}
+              onClick={() => run(['action.delete', todo.title], () => call(`todos/${todo.id}`, { method: 'DELETE' }))}
+              aria-label={t('todo.deleteLabel', todo.title)}
             >
               <Trash2 size={14} aria-hidden="true" />
-              <span className="btn-text">削除</span>
+              <span className="btn-text">{t('todo.delete')}</span>
             </button>
           </div>
         )}
       </div>
       {note !== null && (
         <div className="note">
-          <label htmlFor={`note-${todo.id}`}>メモ（S3 に保存）</label>
+          <label htmlFor={`note-${todo.id}`}>{t('note.field')}</label>
           <textarea id={`note-${todo.id}`} value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={10000} />
           <div className="note-actions">
             <button type="button" className="btn btn-primary btn-sm" onClick={saveNote} disabled={busy}>
-              メモを保存
+              {t('note.save')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNote(null)}>
               <X size={14} aria-hidden="true" />
-              閉じる
+              {t('note.close')}
             </button>
           </div>
         </div>

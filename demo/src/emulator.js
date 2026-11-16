@@ -8,11 +8,13 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { SQSClient } from '@aws-sdk/client-sqs';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createEmulator } from 'aws-emulator-wasm/browser';
+// The wasm that ships with the package; Vite serves it and copies it into the build.
+import wasmUrl from 'aws-emulator-wasm/aws-emulator.wasm?url';
 import { instrument, recordCall } from './calls.js';
 
 const started = performance.now();
 const persistName = document.querySelector('meta[name="aws-emulator-persist"]')?.content;
-// Set by "このタブで使う" before reloading: start at once, and stop the other tab.
+// Set by "Use it in this tab" before reloading: start at once, and stop the other tab.
 const TAKE_OVER = 'aws-emulator-take-over';
 const takeOver = sessionStorage.getItem(TAKE_OVER) === '1';
 sessionStorage.removeItem(TAKE_OVER);
@@ -37,7 +39,7 @@ const update = (patch) => {
 };
 
 export const emulator = createEmulator({
-  wasmUrl: `${import.meta.env.BASE_URL}aws-emulator.wasm`,
+  wasmUrl,
   persist: persistName ? { name: persistName, takeOver } : false,
   onLog: (stream, line) => (stream === 'stderr' ? console.warn : console.log)(`[aws-emulator] ${line}`),
   onCall: recordCall,
@@ -61,7 +63,7 @@ export async function resetAndReload() {
 export const readyIn = emulator.ready.then((stats) => ({ ms: performance.now() - started, persistence: stats.persistence }));
 
 const config = emulator.clientConfig();
-// The variable names are the ones backend.js uses; the call log shows them, e.g. docs.send(PutCommand).
+// The variable names are the ones api/todos.js uses; the call log shows them, e.g. docs.send(PutCommand).
 export const ddb = instrument(new DynamoDBClient(config), 'ddb');
 export const docs = instrument(DynamoDBDocumentClient.from(ddb, { marshallOptions: { removeUndefinedValues: true } }), 'docs');
 export const s3 = instrument(new S3Client({ ...config, forcePathStyle: true }), 's3');

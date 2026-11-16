@@ -95,12 +95,13 @@ test('the REST API answers fetch() from the page through MSW', async ({ page }) 
     const list = await (await fetch('api/todos')).json();
     return { missing: [missing.status, await missing.json()], bad: bad.status, count: list.length };
   });
-  expect(result).toEqual({ missing: [404, { message: 'Todo が見つかりません' }], bad: 400, count: 3 });
+  // The API's own errors: a stable code and an English message (the page translates the code).
+  expect(result).toEqual({ missing: [404, { code: 'NOT_FOUND', message: 'Todo not found' }], bad: 400, count: 3 });
 });
 
 test('the architecture diagram shows the path and the emulator is running', async ({ page }) => {
   const diagram = page.getByRole('list', { name: '構成' });
-  await expect(diagram.locator('strong')).toHaveText(['React', 'MSW', 'AWS SDK v3', 'AWS Emulator（wasm）', 'DynamoDB', 'S3', 'SQS']);
+  await expect(diagram.locator('strong')).toHaveText(['React', 'MSW', 'Hono + AWS SDK v3', 'AWS Emulator（wasm）', 'DynamoDB', 'S3', 'SQS']);
   await expect(diagram.getByRole('listitem', { name: /で渡す$/ })).toHaveText(['fetch', '転送', 'postMessage']);
   await expect(diagram.getByRole('img', { name: '動作中' })).toBeVisible();
   await expect(page.getByRole('list', { name: '使っているサービス' }).getByRole('listitem')).toHaveText([/DynamoDB/, /S3/, /SQS/]);

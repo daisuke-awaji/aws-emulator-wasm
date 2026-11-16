@@ -2,8 +2,11 @@ import { setupWorker } from 'msw/browser';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.jsx';
 import { readyIn } from './emulator.js';
+import { setDocumentKeys } from './i18n.js';
 import { handlers } from './mocks/handlers.js';
 import './styles.css';
+
+setDocumentKeys({ title: 'doc.title', description: 'doc.description' });
 
 const worker = setupWorker(...handlers);
 // The emulator starts downloading at import time; MSW starts in parallel.

@@ -1,27 +1,34 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SDK round-trips — AWS Emulator in the browser</title>
+    <title>SDK round trips — AWS Emulator in the browser</title>
     <style>
       body { font-family: system-ui, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; line-height: 1.6; }
       table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
       th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #ccc; }
       .pass { color: #067647; } .fail { color: #b42318; }
       pre { white-space: pre-wrap; }
+      header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .lang button { font: inherit; padding: 2px 8px; }
+      .lang button[aria-pressed='true'] { font-weight: 600; }
     </style>
   </head>
   <body>
-    <h1>SDK の往復テスト</h1>
-    <p>AWS SDK for JavaScript v3 から、この Worker 内の AWS Emulator（wasm）に DynamoDB・S3・SQS の操作を送ります。Node のテスト（<code>js/test/scenarios.mjs</code>）と同じシナリオです。</p>
-    <p>状態：<strong id="status" role="status">読み込み中</strong></p>
+    <!-- Text comes from src/i18n.js (sdk.*), in the language the Todo page uses. -->
+    <header>
+      <h1 data-t="sdk.title"></h1>
+      <div class="lang" role="group" id="lang"></div>
+    </header>
+    <p id="lead"></p>
+    <p><span data-t="sdk.status"></span><strong id="status" role="status"></strong></p>
     <table>
-      <thead><tr><th>サービス</th><th>操作</th><th>時間</th></tr></thead>
+      <thead><tr><th data-t="sdk.service"></th><th data-t="sdk.operation"></th><th data-t="sdk.time"></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <pre id="error" class="fail"></pre>
-    <p><a href="./">Todo のデモに戻る</a></p>
+    <p><a href="./" data-t="sdk.back"></a></p>
     <script type="module" src="/src/sdk-page.js"></script>
   </body>
 </html>

@@ -3,6 +3,8 @@ name: wasm
 on:
   push:
     branches: [main]
+    # A tag v<version> also publishes the npm package as a GitHub release asset.
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -180,9 +182,14 @@ jobs:
         run: |
           W="$RUNNER_TEMP/wasm"
           if [ -f "$W/aws-emulator.opt.wasm" ]; then src="$W/aws-emulator.opt.wasm"; else src=$(find "$W" -name aws_emulator_wasm_host.wasm); fi
-          EMULATOR_WASM="$src" npm run wasm -w demo
+          EMULATOR_WASM="$src" npm run wasm -w js
           npm run build -w demo
           ls -l demo/dist demo/dist/assets
+
+      - name: The API as a Lambda Web Function runs it (HTTP server, Node)
+        run: |
+          npm run build:web-function -w demo
+          npm run test:api -w demo
 
       - name: Playwright (Chromium, desktop and mobile)
         env:
@@ -210,6 +217,77 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           path: demo/dist
+
+  # The npm package (js/ with the wasm inside), installable straight from a GitHub release:
+  #   npm install https://github.com/<owner>/<repo>/releases/download/v<version>/aws-emulator-wasm-<version>.tgz
+  package:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # gh release create, on tags only
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: aws-emulator-wasm
+          path: ${{ runner.temp }}/wasm
+
+      - name: Pack
+        id: pack
+        run: |
+          W="$RUNNER_TEMP/wasm"
+          if [ -f "$W/aws-emulator.opt.wasm" ]; then src="$W/aws-emulator.opt.wasm"; else src=$(find "$W" -name aws_emulator_wasm_host.wasm); fi
+          EMULATOR_WASM="$src" node js/scripts/copy-wasm.mjs
+          mkdir -p "$RUNNER_TEMP/pkg"
+          file=$(cd js && npm pack --pack-destination "$RUNNER_TEMP/pkg" | tail -n 1)
+          echo "file=$RUNNER_TEMP/pkg/$file" >> "$GITHUB_OUTPUT"
+          ls -l "$RUNNER_TEMP/pkg"
+
+      - name: Install the tarball in an empty project and call DynamoDB from Node
+        run: |
+          dir=$(mktemp -d)
+          cd "$dir"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "${{ steps.pack.outputs.file }}" @aws-sdk/client-dynamodb
+          cat > check.mjs <<'JS'
+          import { DynamoDBClient, ListTablesCommand } from '@aws-sdk/client-dynamodb';
+          import { loadEmulator } from 'aws-emulator-wasm/node';
+          const emulator = await loadEmulator();
+          const ddb = new DynamoDBClient(emulator.clientConfig());
+          console.log(await ddb.send(new ListTablesCommand({})));
+          JS
+          node check.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aws-emulator-wasm-package
+          path: ${{ steps.pack.outputs.file }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./js/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match js/package.json version $version"
+            exit 1
+          fi
+          asset="${{ steps.pack.outputs.file }}"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$(basename "$asset")"
+          printf 'Install:\n\n```bash\nnpm install %s\n```\n' "$url" > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" "$asset" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
 
   deploy:
     needs: browser

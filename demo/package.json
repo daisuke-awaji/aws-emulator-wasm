@@ -2,20 +2,25 @@
   "name": "aws-emulator-wasm-demo",
   "private": true,
   "type": "module",
-  "description": "Todo demo: React + MSW, with the handlers backed by the wasm AWS Emulator (DynamoDB, S3, SQS)",
+  "description": "Todo demo: React + MSW in the browser, with a Hono API (api/) that also runs as a Lambda Web Function, backed by the wasm AWS Emulator (DynamoDB, S3, SQS)",
   "scripts": {
     "wasm": "node scripts/copy-wasm.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 4173 --strictPort",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:api": "node --test api/test/*.test.mjs",
+    "build:web-function": "node scripts/build-web-function.mjs",
+    "start:api": "node api/index.js"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3",
     "@aws-sdk/client-s3": "^3",
     "@aws-sdk/client-sqs": "^3",
     "@aws-sdk/lib-dynamodb": "^3",
+    "@hono/node-server": "^2.1.8",
     "aws-emulator-wasm": "*",
+    "hono": "^4.13.18",
     "lucide-react": "^1.73.0",
     "msw": "^3",
     "react": "^19",
@@ -24,6 +29,7 @@
   "devDependencies": {
     "@playwright/test": "1.65.0",
     "@vitejs/plugin-react": "^6",
+    "esbuild": "^0.28.2",
     "vite": "^8"
   }
 }

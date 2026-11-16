@@ -14,6 +14,8 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     baseURL: `http://localhost:${port}${base}`,
+    // The Japanese UI, as the browser language picks it; i18n.spec.js switches to English.
+    locale: 'ja-JP',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

@@ -1,13 +1,27 @@
 {
   "name": "aws-emulator-wasm",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "JS host for the aws-emulator wasm build: WASI shim, Node and browser loaders, SDK v3 request handler",
+  "description": "AWS Emulator (DynamoDB, S3, SQS) compiled to WebAssembly: runs in a Web Worker or in Node, behind AWS SDK v3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daisuke-awaji/aws-emulator-wasm.git",
+    "directory": "js"
+  },
+  "homepage": "https://github.com/daisuke-awaji/aws-emulator-wasm/tree/main/js#readme",
   "engines": {
     "node": ">=22"
   },
+  "files": [
+    "src/",
+    "test/scenarios.mjs",
+    "aws-emulator.wasm"
+  ],
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "wasm": "node scripts/copy-wasm.mjs",
+    "test": "node --test test/*.test.mjs",
+    "prepack": "node -e \"require('node:fs').statSync('aws-emulator.wasm')\" || (echo 'aws-emulator.wasm is missing: run npm run wasm first' >&2; exit 1)"
   },
   "dependencies": {
     "@smithy/protocol-http": "^5",
@@ -26,6 +40,8 @@
     "./wasi": "./src/wasi.mjs",
     "./codec": "./src/codec.mjs",
     "./scenarios": "./test/scenarios.mjs",
-    "./snapshot-format": "./src/snapshot-format.mjs"
+    "./snapshot-format": "./src/snapshot-format.mjs",
+    "./aws-emulator.wasm": "./aws-emulator.wasm",
+    "./package.json": "./package.json"
   }
 }

@@ -7,8 +7,7 @@ import { before, describe, test } from 'node:test';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
 import { SQSClient } from '@aws-sdk/client-sqs';
-import { loadEmulator, nodeResponseBody } from '../src/emulator.mjs';
-import { WasmRequestHandler } from '../src/handler.mjs';
+import { loadEmulator } from '../src/emulator.mjs';
 import { scenarios } from './scenarios.mjs';
 
 const wasm = process.env.EMULATOR_WASM;
@@ -20,13 +19,7 @@ for (const wasi of ['node', 'shim']) {
     before(async () => {
       const started = performance.now();
       const emulator = await loadEmulator(wasm, { wasi });
-      const config = {
-        region: 'us-east-1',
-        endpoint: 'http://localhost:4566',
-        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-        requestHandler: new WasmRequestHandler(emulator, { responseBody: nodeResponseBody }),
-        maxAttempts: 1,
-      };
+      const config = emulator.clientConfig();
       clients.ddb = new DynamoDBClient(config);
       clients.s3 = new S3Client({ ...config, forcePathStyle: true });
       clients.sqs = new SQSClient(config);

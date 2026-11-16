@@ -63,3 +63,17 @@
   - 復元の表示、最後の保存、「初期状態に戻す」、別のタブで開いているときの表示（図より上に出す）を足した。
 - テスト：Node 24 件 pass。Playwright 30 件 pass（新規の 5 テストは 3 回繰り返しても安定）。
 - ブラウザでの 1 回の保存：2.5 MB、250〜290 ms。
+
+## 2026-11-16 パッケージの分離、デモの日英切り替え
+- js/ を単体で使えるパッケージにした（0.1.0）。wasm は `js/aws-emulator.wasm` に置き（`npm run wasm -w js`）、`aws-emulator-wasm/aws-emulator.wasm` として export する。Node の `loadEmulator()` は引数なしで同梱の wasm を読み、`clientConfig()` を返す。
+- npm には公開しない。タグ `v<version>` を push すると CI が `npm pack` した tarball を GitHub Release に添付する。インストールは release の URL から。tarball を空のプロジェクトに入れて Node・Vite（dev とビルド）・MSW の例で動くことを確かめた。
+- 利用ガイドは js/README.md。README から Status（Phase）の表を外した。
+- デモは英語と日本語（ヘッダーの切り替え、`?lang=`、ブラウザの言語）。wasm はパッケージから `?url` で読む。Playwright 36 件 pass（新規 i18n.spec.js）。
+
+## 2026-11-16 デモの API を Hono にし、Lambda Web Functions へ移せる形にした
+- 上流の Lambda Web Functions（`lambdaweb`）は管理 API だけで、コードを実行しない（エンドポイントは 501）。そこで Web Function をエミュレートせず、同じ API をページの中で動かす。
+- Lambda Web Functions の仕様（AWS のドキュメント）：パッケージの直下の `index.js` を起動し、サーバーは `AWS_LAMBDA_HTTP_ENDPOINT`（host:port）で 10 秒以内に listen する。要求はふつうの HTTP/1.1 で届く。イベントもアダプターも API Gateway もない。SIGTERM の後 1 秒で終わる。ランタイムは nodejs24.x、Arm64。
+- demo/api/：`app.js`（Hono のルートとエラー）、`todos.js`（SDK）、`errors.js`（`{ code, message }`）、`server.js`（環境変数 TABLE_NAME・BUCKET_NAME・QUEUE_URL、`@hono/node-server` で listen）、`index.js`（入口）、`provision.js`（エミュレーター用の作成と初期データ）。
+- MSW は `/api/*` を `app.fetch(request)` に渡すだけ。エラーの文はコードから画面の言語で出す。
+- `npm run build:web-function -w demo`：esbuild で `dist-web-function/index.js`（約 800 KiB）と `package.json`（type: module）。
+- `npm run test:api -w demo`：サーバーを 127.0.0.1 で立て、Node のエミュレーターに対して HTTP で叩く。ビルドしたパッケージを Lambda と同じ環境変数で起動し、listen と SIGTERM での終了を確かめる（3 件 pass）。
