@@ -28,3 +28,10 @@
 - 幅 600 px 以上では 3 つの箱を横に並べ、エミュレーターへは真下に 1 本の矢印。狭い画面では縦に並べ、矢印はすべて下向きの直線（折れ線なし）。
 - エミュレーターの状態（読み込み中・動作中・失敗）を色の点で示す。
 - Playwright に構成図のテストを追加（矢印と箱が重ならないことも確かめる）。14 テスト pass。
+
+## 2026-11-16 SDK の呼び出し回数、Vercel 風の画面、内部のアーキテクチャ図
+- 「Todo を追加すると SDK の呼び出しが 15 回」の原因：表示は起動からの累計で、起動時の準備の 13 回に、追加の 2 回（PutItem・SendMessage）を足した値だった。さらに `GET /api/emulator` を一覧・変更の記録の読み直しと並行に呼んでいたため、読み直しの 4 回（Scan・ReceiveMessage・DeleteMessageBatch・ReceiveMessage）が数に入る前の値を表示していた。追加 1 回で実際に呼ぶのは 6 回。
+- 直したこと：読み直しを順番に行い、カウンターは最後に読む。`createEmulator` に `onCall` を足し、操作ごとの呼び出しを「SDK の呼び出し」欄に出す（API ごとの印付き）。「直前の操作」の回数も出す。
+- 画面を Vercel（Geist）風に作り直した。Geist と Geist Mono（OFL）を同梱し、外部へのリクエストはなし。ライトとダークの両方。
+- 内部のアーキテクチャ図を draw.io で作った（`docs/architecture/architecture.drawio`、`scripts/architecture.py` が生成し、直線であることと重なりがないことを確かめる）。README に PNG を貼った。
+- Playwright 18 件（9 テスト × デスクトップ・スマートフォン）pass、Node 17 件 pass。

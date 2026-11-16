@@ -111,3 +111,47 @@ test('the architecture diagram shows the path and the emulator is running', asyn
   });
   expect(crossings).toEqual([]);
 });
+
+test('the SDK call log shows what one action costs, and the counter includes it', async ({ page }) => {
+  const log = page.getByRole('region', { name: 'SDK の呼び出し' });
+  const boot = log.getByRole('list', { name: /^起動/ });
+  // Setup: table, bucket, queue and 3 seeded todos (11), then the first Scan and an empty receive.
+  await expect(page.getByTestId('requests')).toHaveText('13 回');
+  await expect(page.getByTestId('last-calls')).toHaveText('13 回');
+  await expect(boot.getByRole('listitem')).toHaveCount(13);
+
+  await page.getByLabel('新しい Todo').fill('牛乳を買う');
+  await page.getByRole('button', { name: '追加' }).click();
+  await expect(item(page, '牛乳を買う')).toBeVisible();
+  const added = log.getByRole('list', { name: 'Todo を追加 の SDK 呼び出し' }).getByRole('listitem');
+  await expect(added).toHaveText([
+    /POST \/api\/todos.*DynamoDB.*PutItem.*200/,
+    /POST \/api\/todos.*SQS.*SendMessage.*200/,
+    /GET \/api\/todos.*DynamoDB.*Scan.*200/,
+    /GET \/api\/activity.*SQS.*ReceiveMessage.*200/,
+    /GET \/api\/activity.*SQS.*DeleteMessageBatch.*200/,
+    /GET \/api\/activity.*SQS.*ReceiveMessage.*200/,
+  ]);
+  await expect(page.getByTestId('last-calls')).toHaveText('6 回');
+  await expect(page.getByTestId('requests')).toHaveText('19 回');
+
+  // A rejected title makes no SDK call at all.
+  await page.getByLabel('新しい Todo').fill('   ');
+  await page.getByRole('button', { name: '追加' }).click();
+  await expect(page.getByRole('alert')).toHaveText('タイトルを入力してください');
+  await expect(page.getByTestId('last-calls')).toHaveText('0 回');
+  await expect(page.getByTestId('requests')).toHaveText('19 回');
+});
+
+test('no horizontal scrolling and the Geist fonts are served from the site', async ({ page }) => {
+  const { sw, cw, fonts } = await page.evaluate(async () => {
+    await document.fonts.ready;
+    return {
+      sw: document.documentElement.scrollWidth,
+      cw: document.documentElement.clientWidth,
+      fonts: [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family),
+    };
+  });
+  expect(sw).toBeLessThanOrEqual(cw);
+  expect(fonts).toEqual(expect.arrayContaining(['Geist']));
+});

@@ -2,6 +2,7 @@
 // backend.js, which talks to the in-browser AWS Emulator through the AWS SDK.
 import { http, HttpResponse } from 'msw/http';
 import * as backend from '../backend.js';
+import { callsSince, inRoute } from '../calls.js';
 import { emulator } from '../emulator.js';
 
 /** Absolute URL of an API path under this page's base, e.g. api('todos/:id'). */
@@ -17,9 +18,14 @@ async function readJson(request) {
 
 /** Runs a handler after setup and turns errors into JSON error responses. */
 const route = (fn) => async (info) => {
+  const { pathname } = new URL(info.request.url);
+  const path = pathname.slice(new URL(document.baseURI).pathname.length).replace(/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/g, ':id');
+  const tag = `${info.request.method} /${path}`;
   try {
-    await backend.ensureSetup();
-    return await fn(info);
+    return await inRoute(tag, async () => {
+      await backend.ensureSetup();
+      return await fn(info);
+    });
   } catch (error) {
     if (error instanceof backend.HttpError) {
       return HttpResponse.json({ message: error.message }, { status: error.status });
@@ -40,5 +46,11 @@ export const handlers = [
   http.get(api('todos/:id/note'), route(async ({ params }) => HttpResponse.text(await backend.getNote(params.id)))),
   http.put(api('todos/:id/note'), route(async ({ params, request }) => HttpResponse.json(await backend.putNote(params.id, await request.text())))),
   http.get(api('activity'), route(async () => HttpResponse.json(await backend.drainActivity()))),
-  http.get(api('emulator'), () => HttpResponse.json({ ...emulator.stats })),
+  // ?since=N adds the SDK calls answered after call N (see calls.js).
+  http.get(api('emulator'), ({ request }) => {
+    const since = new URL(request.url).searchParams.get('since');
+    const body = { ...emulator.stats };
+    if (since !== null) body.calls = callsSince(Number(since) || 0).slice(-200);
+    return HttpResponse.json(body);
+  }),
 ];

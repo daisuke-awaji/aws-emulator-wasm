@@ -14,7 +14,13 @@ import { WasmRequestHandler } from '../handler.mjs';
  *   worker?: Worker,
  *   clock?: 'virtual' | 'real',
  *   onLog?: (stream: 'stdout' | 'stderr', line: string) => void,
+ *   onCall?: (call: {
+ *     seq: number, method: string, url: string, headers: [string, string][],
+ *     status: number, ms: number, startedAt: number,
+ *   }) => void,
  * }} options
+ *   onCall: called after each request the emulator answers. `seq` matches stats.requests;
+ *   `ms` is the time from posting the request to the Worker until its answer arrived.
  */
 export function createEmulator(options) {
   const worker = options.worker ?? new Worker(new URL('./worker.mjs', import.meta.url), { type: 'module', name: 'aws-emulator' });
@@ -60,7 +66,24 @@ export function createEmulator(options) {
         else {
           stats.requests += 1;
           stats.skippedMs = data.skippedMs;
-          call.resolve(decodeResponse(new Uint8Array(data.frame)));
+          const res = decodeResponse(new Uint8Array(data.frame));
+          if (options.onCall) {
+            const { req, startedAt } = call;
+            try {
+              options.onCall({
+                seq: stats.requests,
+                method: req.method,
+                url: req.url,
+                headers: req.headers,
+                status: res.status,
+                ms: performance.now() - startedAt,
+                startedAt,
+              });
+            } catch (error) {
+              console.error('onCall threw', error);
+            }
+          }
+          call.resolve(res);
         }
         break;
       }
@@ -78,7 +101,7 @@ export function createEmulator(options) {
     const frame = encodeRequest(req);
     const id = nextId++;
     return new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject });
+      pending.set(id, { resolve, reject, req, startedAt: performance.now() });
       worker.postMessage({ type: 'request', id, frame: frame.buffer }, [frame.buffer]);
     });
   }

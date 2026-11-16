@@ -29,7 +29,7 @@ function Edge({ label, className = '' }) {
 /** The architecture diagram. `state` is 'loading' | 'ready' | 'failed' and colors the emulator. */
 export function Architecture({ state }) {
   return (
-    <figure className="arch" aria-labelledby="arch-title">
+    <figure className={`arch is-${state}`} aria-labelledby="arch-title">
       <figcaption id="arch-title" className="arch-frame-label">
         <Globe size={14} aria-hidden="true" />
         ブラウザ

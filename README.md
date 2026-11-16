@@ -17,6 +17,31 @@
 
 この図はデモの画面の上部にあるものと同じです（`demo/src/Architecture.jsx`）。AWS のアイコンは [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)（2026-07-31 版）、ほかのアイコンは [Lucide](https://lucide.dev/) です。
 
+## 内部のアーキテクチャ
+
+ファイル単位で、1 回の SDK 呼び出しがどこを通るかを描いた図です。上の段は CI と配信、下の大きな枠が 1 つのタブの中です。
+
+![内部のアーキテクチャ：CI（build → browser → deploy）から GitHub Pages に公開し、ブラウザのメインスレッド（React → Service Worker → MSW のハンドラ → backend.js → AWS SDK v3 → WasmRequestHandler → createEmulator）から postMessage で Web Worker（worker.mjs → aws-emulator.wasm の C ABI → tokio → MultiServiceRouter → DynamoDB・S3・SQS ほか → InMemoryEngine）へ渡る流れ](./docs/img/architecture.drawio.png)
+
+- 元の図：[`docs/architecture/architecture.drawio`](./docs/architecture/architecture.drawio)。PNG（`docs/img/architecture.drawio.png`）にも図のデータを埋め込んであるので、そのまま draw.io で開いて編集できます。SVG は [`docs/architecture/architecture.svg`](./docs/architecture/architecture.svg)。
+- 図は `scripts/architecture.py` が座標から作ります。矢印はすべて縦か横の直線で、箱やラベルの上を通らないことをスクリプトが確かめます。書き直したら `python3 scripts/architecture.py && node scripts/render-architecture.mjs` で PNG と SVG を作り直します（描画に viewer.diagrams.net を使います）。
+- アイコン：AWS のサービスは AWS Architecture Icons、ほかは [Simple Icons](https://simpleicons.org/)（CC0、`docs/architecture/icons/`）。
+
+### SDK の呼び出し回数
+
+デモの「SDK の呼び出し」欄は、操作ごとにエミュレーターが受けた呼び出しを並べます。画面は変更の API を呼んだあと、一覧と変更の記録を読み直すので、Todo を 1 件追加すると 6 回になります。
+
+| 呼び出し | API | 目的 |
+|---|---|---|
+| DynamoDB PutItem | `POST /api/todos` | Todo を保存する |
+| SQS SendMessage | `POST /api/todos` | 「追加」の記録を送る |
+| DynamoDB Scan | `GET /api/todos` | 一覧を読み直す |
+| SQS ReceiveMessage | `GET /api/activity` | 記録を受け取る（1 件） |
+| SQS DeleteMessageBatch | `GET /api/activity` | 受け取った記録を消す |
+| SQS ReceiveMessage | `GET /api/activity` | キューが空であることを確かめる |
+
+起動時の準備（テーブル・バケット・キューの作成、初期データ 3 件、最初の読み込み）は 13 回です。累計の欄はこの 13 回を含みます。
+
 ## 使い方（ブラウザ）
 
 ```js
@@ -30,6 +55,7 @@ const s3 = new S3Client(emulator.clientConfig({ forcePathStyle: true }));
 ```
 
 - 状態はメモリの中だけにあり、ページを閉じると消えます。
+- `createEmulator({ onCall })` を渡すと、エミュレーターが応答するたびに `{ seq, method, url, headers, status, ms }` で呼ばれます。デモはこれで「SDK の呼び出し」欄を作っています（`demo/src/calls.js`）。
 - 時計は「仮想時計」が既定です。エミュレーターが待つ場面（作成直後の DynamoDB テーブルなど）では待たずに時計を進めます。詳しくは [Phase 1 レポート](./docs/phase1-report.md#2-設計で決めたこと)を参照してください。
 - 載っているサービス：DynamoDB、S3、SQS と、それらが依存するサービス（計 13）。
 
@@ -55,6 +81,7 @@ const s3 = new S3Client(emulator.clientConfig({ forcePathStyle: true }));
 | `scripts/closure.py` | 起点クレートからの path 依存の閉包を出す |
 | `scripts/trim_workspace.py` | workspace の members を閉包に絞り、dev-dependencies を外す |
 | `scripts/patch_wasm.py` | wasm32 用のパッチ集（P1〜P4）。`patches/files/` を使う |
+| `scripts/architecture.py`・`scripts/render-architecture.mjs` | 内部のアーキテクチャ図（draw.io）を作り、PNG と SVG に描く |
 | `crates/wasm-host/` | wasm の入口（router と C ABI） |
 | `js/`（npm workspace `aws-emulator-wasm`） | WASI シム、Node とブラウザのローダー、SDK v3 の request handler、テスト |
 | `demo/` | Vite + React + MSW の Todo デモ、SDK テストページ、Playwright のテスト |

@@ -4,6 +4,7 @@ import { ConditionalCheckFailedException, CreateTableCommand, DescribeTableComma
 import { CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, NoSuchKey, PutObjectCommand } from '@aws-sdk/client-s3';
 import { CreateQueueCommand, DeleteMessageBatchCommand, ReceiveMessageCommand, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { DeleteCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { inSetup } from './calls.js';
 import { ddb, docs, s3, sqs } from './emulator.js';
 
 export const TABLE = 'todos';
@@ -47,7 +48,7 @@ async function setup() {
 
 let ready;
 /** Creates the table, bucket and queue once (the emulator starts empty on every load). */
-export const ensureSetup = () => (ready ??= setup());
+export const ensureSetup = () => (ready ??= inSetup(setup));
 
 async function publish(type, todo) {
   await sqs.send(new SendMessageCommand({

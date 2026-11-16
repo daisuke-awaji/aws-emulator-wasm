@@ -5,12 +5,14 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { SQSClient } from '@aws-sdk/client-sqs';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createEmulator } from 'aws-emulator-wasm/browser';
+import { recordCall } from './calls.js';
 
 const started = performance.now();
 
 export const emulator = createEmulator({
   wasmUrl: `${import.meta.env.BASE_URL}aws-emulator.wasm`,
   onLog: (stream, line) => (stream === 'stderr' ? console.warn : console.log)(`[aws-emulator] ${line}`),
+  onCall: recordCall,
 });
 
 /** Milliseconds from page start until the emulator was ready. */
