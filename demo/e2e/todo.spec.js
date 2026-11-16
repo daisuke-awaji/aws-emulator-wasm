@@ -118,7 +118,7 @@ test('the architecture diagram shows the path and the emulator is running', asyn
 test('the SDK call log shows what one action costs, and the counter includes it', async ({ page }) => {
   const log = page.getByRole('region', { name: 'SDK の呼び出し' });
   const boot = log.getByRole('list', { name: /^起動/ });
-  // Setup: table, bucket, queue and 3 seeded todos (11), then the first Scan and an empty receive.
+  // Setup: table, bucket, queue and 3 seeded todos (11), then the first Query and an empty receive.
   await expect(page.getByTestId('requests')).toHaveText('13 回');
   await expect(page.getByTestId('last-calls')).toHaveText('13 回');
   await expect(boot.getByRole('listitem')).toHaveCount(13);
@@ -130,7 +130,7 @@ test('the SDK call log shows what one action costs, and the counter includes it'
   await expect(added).toHaveText([
     /POST \/api\/todos.*DynamoDB.*PutItem.*200/,
     /POST \/api\/todos.*SQS.*SendMessage.*200/,
-    /GET \/api\/todos.*DynamoDB.*Scan.*200/,
+    /GET \/api\/todos.*DynamoDB.*Query.*200/,
     /GET \/api\/activity.*SQS.*ReceiveMessage.*200/,
     /GET \/api\/activity.*SQS.*DeleteMessageBatch.*200/,
     /GET \/api\/activity.*SQS.*ReceiveMessage.*200/,
@@ -156,7 +156,7 @@ test('the SDK call log opens to the input and output of each SDK command', async
   await expect(rows).toHaveText([
     /DynamoDB.*docs\.send\(UpdateCommand\).*UpdateItem.*200/,
     /SQS.*sqs\.send\(SendMessageCommand\).*200/,
-    /Scan/,
+    /Query/,
     /ReceiveMessage/,
     /DeleteMessageBatch/,
     /ReceiveMessage/,

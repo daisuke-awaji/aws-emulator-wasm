@@ -8,6 +8,12 @@ import { inSetup } from './calls.js';
 import { ddb, docs, emulator, s3, sqs } from './emulator.js';
 import { t } from './i18n.js';
 
+/**
+ * The one user of the in-browser API. There is no sign-in here: the data never leaves
+ * this browser. The AWS build signs users in with Cognito instead (api/server.js).
+ */
+export const LOCAL_USER = 'local-user';
+
 async function setup() {
   const { persistence } = await emulator.ready;
   let config;
@@ -17,10 +23,10 @@ async function setup() {
     config = { table: NAMES.table, bucket: NAMES.bucket, queueUrl: QueueUrl };
   } else {
     // Seeds are in the language of the page at first start (they are data from then on).
-    config = await provision({ ddb, docs, s3, sqs }, { seeds: t('seeds') });
+    config = await provision({ ddb, docs, s3, sqs }, { user: LOCAL_USER, seeds: t('seeds') });
   }
   // exposeErrors: an emulator failure shows its message in the page.
-  return createApp({ docs, s3, sqs, ...config, exposeErrors: true });
+  return createApp({ docs, s3, sqs, ...config, authenticate: () => LOCAL_USER, exposeErrors: true });
 }
 
 let app;

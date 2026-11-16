@@ -1,16 +1,24 @@
 // The Todo service: plain functions over the AWS SDK, with no idea where they run.
-// Todos live in DynamoDB, notes in S3, and every change is published to SQS.
+// Todos live in DynamoDB, notes in S3, and every change is published to SQS. Every
+// operation belongs to one user: the table is keyed by (userId, id), and notes are stored
+// under the user's prefix.
 //
-// The same code runs in the browser (clients pointed at the wasm emulator) and in
-// Lambda (default clients). Everything environment-specific comes in through createTodos().
+// The same code runs in the browser (clients pointed at the wasm emulator) and in the
+// Lambda Web Function (default clients). Everything environment-specific comes in through
+// createTodos().
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { DeleteObjectCommand, GetObjectCommand, NoSuchKey, PutObjectCommand } from '@aws-sdk/client-s3';
-import { DeleteMessageBatchCommand, ReceiveMessageCommand, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { DeleteCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { ChangeMessageVisibilityBatchCommand, DeleteMessageBatchCommand, ReceiveMessageCommand, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { DeleteCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ApiError } from './errors.js';
 
 export const MAX_TITLE = 200;
 export const MAX_NOTE = 10_000;
+/** Receive rounds per drain (10 messages each): the queue is shared, so bound the scan. */
+const MAX_DRAIN_ROUNDS = 10;
+
+/** A Todo as the API returns it (the partition key stays inside). */
+const view = ({ userId, ...todo }) => todo;
 
 /**
  * @param {{
@@ -19,14 +27,23 @@ export const MAX_NOTE = 10_000;
  *   sqs: import('@aws-sdk/client-sqs').SQSClient,
  *   table: string, bucket: string, queueUrl: string,
  * }} deps
+ * @returns {(userId: string) => ReturnType<typeof forUser>}
  */
-export function createTodos({ docs, s3, sqs, table, bucket, queueUrl }) {
-  const noteKey = (id) => `notes/${id}.txt`;
+export function createTodos(deps) {
+  return (userId) => {
+    if (typeof userId !== 'string' || userId === '') throw new ApiError(401, 'UNAUTHORIZED');
+    return forUser(deps, userId);
+  };
+}
+
+function forUser({ docs, s3, sqs, table, bucket, queueUrl }, userId) {
+  const noteKey = (id) => `notes/${userId}/${id}.txt`;
+  const key = (id) => ({ userId, id });
 
   async function publish(type, todo) {
     await sqs.send(new SendMessageCommand({
       QueueUrl: queueUrl,
-      MessageBody: JSON.stringify({ type, id: todo.id, title: todo.title, at: new Date().toISOString() }),
+      MessageBody: JSON.stringify({ type, userId, id: todo.id, title: todo.title, at: new Date().toISOString() }),
     }));
   }
 
@@ -50,19 +67,24 @@ export function createTodos({ docs, s3, sqs, table, bucket, queueUrl }) {
     const items = [];
     let ExclusiveStartKey;
     do {
-      const page = await docs.send(new ScanCommand({ TableName: table, ExclusiveStartKey }));
+      const page = await docs.send(new QueryCommand({
+        TableName: table,
+        KeyConditionExpression: 'userId = :u',
+        ExpressionAttributeValues: { ':u': userId },
+        ExclusiveStartKey,
+      }));
       items.push(...page.Items);
       ExclusiveStartKey = page.LastEvaluatedKey;
     } while (ExclusiveStartKey);
-    return items.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
+    return items.map(view).sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
   }
 
   /** options.createdAt and options.notify: false are for seeding. */
   async function create(input, { createdAt = new Date().toISOString(), notify = true } = {}) {
-    const todo = { id: crypto.randomUUID(), title: checkTitle(input?.title), done: false, hasNote: false, createdAt };
+    const todo = { userId, id: crypto.randomUUID(), title: checkTitle(input?.title), done: false, hasNote: false, createdAt };
     await docs.send(new PutCommand({ TableName: table, Item: todo }));
     if (notify) await publish('created', todo);
-    return todo;
+    return view(todo);
   }
 
   async function update(id, patch, { notify = true } = {}) {
@@ -81,7 +103,7 @@ export function createTodos({ docs, s3, sqs, table, bucket, queueUrl }) {
     const { Attributes } = await onExisting(() =>
       docs.send(new UpdateCommand({
         TableName: table,
-        Key: { id },
+        Key: key(id),
         UpdateExpression: `SET ${sets.join(', ')}`,
         ConditionExpression: 'attribute_exists(id)',
         ExpressionAttributeValues: values,
@@ -89,14 +111,14 @@ export function createTodos({ docs, s3, sqs, table, bucket, queueUrl }) {
       })),
     );
     if (notify) await publish(patch.done === undefined ? 'renamed' : patch.done ? 'completed' : 'reopened', Attributes);
-    return Attributes;
+    return view(Attributes);
   }
 
   async function remove(id) {
     const { Attributes } = await onExisting(() =>
       docs.send(new DeleteCommand({
         TableName: table,
-        Key: { id },
+        Key: key(id),
         ConditionExpression: 'attribute_exists(id)',
         ReturnValues: 'ALL_OLD',
       })),
@@ -123,7 +145,7 @@ export function createTodos({ docs, s3, sqs, table, bucket, queueUrl }) {
     const { Attributes: item } = await onExisting(() =>
       docs.send(new UpdateCommand({
         TableName: table,
-        Key: { id },
+        Key: key(id),
         UpdateExpression: 'SET hasNote = :n',
         ConditionExpression: 'attribute_exists(id)',
         ExpressionAttributeValues: { ':n': hasNote },
@@ -141,22 +163,63 @@ export function createTodos({ docs, s3, sqs, table, bucket, queueUrl }) {
       await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: noteKey(id) }));
     }
     if (notify) await publish('noted', item);
-    return item;
+    return view(item);
   }
 
-  /** Takes the change events waiting in the queue (oldest first) and removes them. */
+  /**
+   * Takes this user's change events waiting in the queue (oldest first) and removes them.
+   * The queue is shared: other users' events stay invisible until the drain ends, so each
+   * round sees messages it has not seen yet, and then they are released together.
+   */
   async function drainActivity() {
     const events = [];
-    for (;;) {
-      const { Messages = [] } = await sqs.send(new ReceiveMessageCommand({ QueueUrl: queueUrl, MaxNumberOfMessages: 10 }));
-      if (Messages.length === 0) break;
-      events.push(...Messages.map((m) => JSON.parse(m.Body)));
-      await sqs.send(new DeleteMessageBatchCommand({
-        QueueUrl: queueUrl,
-        Entries: Messages.map((m, i) => ({ Id: String(i), ReceiptHandle: m.ReceiptHandle })),
-      }));
+    const others = [];
+    try {
+      await receiveRounds(events, others);
+    } finally {
+      await release(others);
     }
     return events.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  }
+
+  const entries = (list) => list.map((m, i) => ({ Id: String(i), ReceiptHandle: m.ReceiptHandle }));
+
+  /** Makes other users' messages visible again, 10 per batch (the SQS limit). */
+  async function release(messages) {
+    for (let i = 0; i < messages.length; i += 10) {
+      await sqs.send(new ChangeMessageVisibilityBatchCommand({
+        QueueUrl: queueUrl,
+        Entries: entries(messages.slice(i, i + 10)).map((e) => ({ ...e, VisibilityTimeout: 0 })),
+      }));
+    }
+  }
+
+  async function receiveRounds(events, others) {
+    for (let round = 0; round < MAX_DRAIN_ROUNDS; round++) {
+      // The first receive long-polls briefly: SQS short polling samples only some servers,
+      // so it can come back empty while a message is waiting. Later rounds just finish off.
+      const { Messages = [] } = await sqs.send(new ReceiveMessageCommand({
+        QueueUrl: queueUrl,
+        MaxNumberOfMessages: 10,
+        WaitTimeSeconds: round === 0 ? 1 : 0,
+      }));
+      if (Messages.length === 0) break;
+      const mine = [];
+      for (const m of Messages) {
+        let event;
+        try {
+          event = JSON.parse(m.Body);
+        } catch {
+          event = undefined;
+        }
+        if (event?.userId === userId) {
+          mine.push(m);
+          const { userId: _, ...rest } = event;
+          events.push(rest);
+        } else others.push(m);
+      }
+      if (mine.length) await sqs.send(new DeleteMessageBatchCommand({ QueueUrl: queueUrl, Entries: entries(mine) }));
+    }
   }
 
   return { list, create, update, remove, getNote, putNote, drainActivity };

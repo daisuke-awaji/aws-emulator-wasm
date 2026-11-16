@@ -4,8 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="A Todo app with no server. MSW hands requests to a Hono API that calls DynamoDB, S3 and SQS on the AWS Emulator (wasm) running in the browser." />
-    <!-- Keep the emulator's state across reloads (OPFS), under this name. -->
-    <meta name="aws-emulator-persist" content="todo-demo" />
+    <!-- Keep the emulator's state across reloads (OPFS), under this name. The suffix changes
+         with the table's key schema, so a snapshot of the old schema is never restored. -->
+    <meta name="aws-emulator-persist" content="todo-demo-2" />
     <title>Todo — AWS Emulator in the browser</title>
   </head>
   <body>

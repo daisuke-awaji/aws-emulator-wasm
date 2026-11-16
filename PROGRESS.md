@@ -77,3 +77,12 @@
 - MSW は `/api/*` を `app.fetch(request)` に渡すだけ。エラーの文はコードから画面の言語で出す。
 - `npm run build:web-function -w demo`：esbuild で `dist-web-function/index.js`（約 800 KiB）と `package.json`（type: module）。
 - `npm run test:api -w demo`：サーバーを 127.0.0.1 で立て、Node のエミュレーターに対して HTTP で叩く。ビルドしたパッケージを Lambda と同じ環境変数で起動し、listen と SIGTERM での終了を確かめる（3 件 pass）。
+
+## 2026-11-16 本番（AWS）への切り替え：CDK と Cognito
+- infra/：CDK（aws-cdk-lib 2.277 の `lambda.WebFunction`）で DynamoDB（userId, id）・S3・SQS・Cognito ユーザープール・Lambda Web Function を作る。us-east-1 にデプロイした。
+- 認証：ブラウザは SigV4 で署名できないので、エンドポイントは ApplicationManaged。API（server.js）が Cognito のアクセストークンを aws-jwt-verify で確かめる。トークンがなければ 401（WWW-Authenticate: Bearer）。データはユーザーごと。CORS は許可したオリジンだけ。設定が欠けていればサーバーは起動しない。セルフサインアップはなし。
+- フロントエンド：`VITE_API_URL` などを渡してビルドすると、MSW とエミュレーターを含まず、同じ要求をエンドポイントに送る（Cognito のサインインは oidc-client-ts、コード + PKCE）。`npm run deploy -w infra` が demo/.env.aws.local を書く。
+- 実環境で確かめたこと：匿名と偽のトークンは 401、別オリジンには CORS を返さない。infra/scripts/smoke.mjs で一時ユーザーを作り、Cognito の画面でサインインし、追加・完了・メモ・削除・サインアウトまで通した。
+- 実 SQS の short polling は待っているメッセージを取りこぼすので、drain の最初の受信だけ 1 秒 long polling にした。
+- /code-review の指摘で直したこと：共有キューで他人のメッセージが自分の分を隠す問題（drain の間は他人の分を見えないままにし、最後にまとめて戻す）、JWKS の取得失敗を 401 にしない、サインインのコールバック失敗で画面が止まる問題、ほか。
+- テスト：API 8 件、Playwright 36 件、CDK 5 件 pass。

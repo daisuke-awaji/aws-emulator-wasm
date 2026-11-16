@@ -1,0 +1,24 @@
+{
+  "name": "aws-emulator-wasm-infra",
+  "private": true,
+  "type": "module",
+  "description": "AWS CDK app: the demo's API as a Lambda Web Function, with DynamoDB, S3, SQS and Cognito",
+  "scripts": {
+    "build:api": "npm --prefix ../demo run build:web-function",
+    "synth": "npm run build:api && cdk synth --quiet",
+    "deploy": "npm run build:api && cdk deploy --require-approval never --outputs-file cdk-outputs.json && node scripts/write-env.mjs",
+    "env": "node scripts/write-env.mjs",
+    "destroy": "cdk destroy",
+    "test": "npm run build:api && node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.277.0",
+    "constructs": "^10.8.1"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1169.0",
+    "@aws-sdk/client-dynamodb": "^3.1169.0",
+    "@playwright/test": "^1.65.0",
+    "aws-cdk": "^2.1148.1"
+  }
+}

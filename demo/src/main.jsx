@@ -1,19 +1,10 @@
-import { setupWorker } from 'msw/browser';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.jsx';
-import { readyIn } from './emulator.js';
 import { setDocumentKeys } from './i18n.js';
-import { handlers } from './mocks/handlers.js';
 import './styles.css';
 
 setDocumentKeys({ title: 'doc.title', description: 'doc.description' });
 
-const worker = setupWorker(...handlers);
-// The emulator starts downloading at import time; MSW starts in parallel.
-const mocking = worker.start({
-  serviceWorker: { url: `${import.meta.env.BASE_URL}mockServiceWorker.js` },
-  onUnhandledFrame: 'bypass',
-  quiet: true,
-});
-
-createRoot(document.getElementById('root')).render(<App mocking={mocking} readyIn={readyIn} />);
+// The build decides where the API is (target.js); the other runtime is not in the bundle.
+const { start } = await (import.meta.env.VITE_API_URL ? import('./runtime-aws.js') : import('./runtime-emulator.js'));
+createRoot(document.getElementById('root')).render(<App runtime={start()} />);

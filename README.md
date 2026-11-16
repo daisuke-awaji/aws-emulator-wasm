@@ -67,7 +67,11 @@ In Node: `const emulator = await loadEmulator()` from `aws-emulator-wasm/node`, 
 
 [`demo/`](./demo) is a separate app that uses the package the way any app would: a Todo list whose REST API is a [Hono](https://hono.dev/) app. In the page, MSW hands each request to `app.fetch()`; the API keeps todos in DynamoDB, notes in S3 and a change log in SQS through AWS SDK v3. The SDK call log shows every request with its input and output. The UI is in English and Japanese (the switch in the header, or `?lang=en` / `?lang=ja`).
 
-The API in [`demo/api/`](./demo/api) is written to move to AWS as it is, as a [Lambda Web Function](https://docs.aws.amazon.com/lambda/latest/dg/web-functions.html): Lambda runs the same Hono app as a plain Node.js HTTP server listening on `AWS_LAMBDA_HTTP_ENDPOINT`, with no adapter and no API Gateway. `npm run build:web-function -w demo` builds the package, and CI serves the API over HTTP against the emulator and starts the package the way Lambda does. See [demo/api/README.md](./demo/api/README.md) for deployment, permissions and what changes in production.
+The API in [`demo/api/`](./demo/api) is written to move to AWS as it is, as a [Lambda Web Function](https://docs.aws.amazon.com/lambda/latest/dg/web-functions.html): Lambda runs the same Hono app as a plain Node.js HTTP server listening on `AWS_LAMBDA_HTTP_ENDPOINT`, with no adapter and no API Gateway. `npm run build:web-function -w demo` builds the package, and CI serves the API over HTTP against the emulator and starts the package the way Lambda does. See [demo/api/README.md](./demo/api/README.md) for how the API stays portable.
+
+### On real AWS
+
+[`infra/`](./infra) is a CDK app that runs the same API as a Lambda Web Function with DynamoDB, S3, SQS and Cognito sign-in. Pointing the page at it is a build setting: `npm run deploy -w infra` writes `VITE_API_URL` and the Cognito settings to `demo/.env.aws.local`, and `npm run build:aws -w demo` builds the same page against the endpoint, with sign-in and without the emulator. See [infra/README.md](./infra/README.md).
 
 > [!NOTE]
 > AWS Emulator models Lambda Web Functions (`lambdaweb`) only as a control plane: it stores functions, revisions and endpoints but runs no code (endpoints answer 501). The demo therefore runs the API in the page instead of emulating the Web Function.
@@ -139,6 +143,7 @@ crates/wasm-host/   wasm entry point: router and C ABI
 js/                 the aws-emulator-wasm package: WASI shim, browser and Node loaders, SDK request handler, snapshots
 demo/               Vite + React + MSW Todo demo (English and Japanese), SDK test page, Playwright tests
 demo/api/           the demo's Hono API: behind MSW in the page, and as a Lambda Web Function (index.js)
+infra/              AWS CDK app: the API as a Lambda Web Function, with DynamoDB, S3, SQS and Cognito
 scripts/            fetch and trim upstream, apply wasm patches, draw the architecture
 patches/            the wasm32 patch set (P1–P4)
 docs/               design notes and reports

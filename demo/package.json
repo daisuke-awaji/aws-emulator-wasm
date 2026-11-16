@@ -11,7 +11,9 @@
     "test:e2e": "playwright test",
     "test:api": "node --test api/test/*.test.mjs",
     "build:web-function": "node scripts/build-web-function.mjs",
-    "start:api": "node api/index.js"
+    "start:api": "node api/index.js",
+    "dev:aws": "vite --mode aws",
+    "build:aws": "vite build --mode aws"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3",
@@ -20,9 +22,11 @@
     "@aws-sdk/lib-dynamodb": "^3",
     "@hono/node-server": "^2.1.8",
     "aws-emulator-wasm": "*",
+    "aws-jwt-verify": "^5.2.1",
     "hono": "^4.13.18",
     "lucide-react": "^1.73.0",
     "msw": "^3",
+    "oidc-client-ts": "^3.5.0",
     "react": "^19",
     "react-dom": "^19"
   },

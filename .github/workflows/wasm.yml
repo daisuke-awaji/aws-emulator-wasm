@@ -186,10 +186,11 @@ jobs:
           npm run build -w demo
           ls -l demo/dist demo/dist/assets
 
-      - name: The API as a Lambda Web Function runs it (HTTP server, Node)
+      - name: The API as a Lambda Web Function runs it (HTTP server, Node), and the CDK stack
         run: |
           npm run build:web-function -w demo
           npm run test:api -w demo
+          node --test infra/test/*.test.mjs
 
       - name: Playwright (Chromium, desktop and mobile)
         env:

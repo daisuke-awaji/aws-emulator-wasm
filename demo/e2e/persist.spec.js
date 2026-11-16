@@ -35,7 +35,7 @@ async function add(page, title) {
 function editSnapshots(page, edit) {
   return page.evaluate(async (edit) => {
     const root = await navigator.storage.getDirectory();
-    const dir = await (await root.getDirectoryHandle('aws-emulator-wasm')).getDirectoryHandle('todo-demo');
+    const dir = await (await root.getDirectoryHandle('aws-emulator-wasm')).getDirectoryHandle('todo-demo-2');
     const slots = [];
     for await (const [name, handle] of dir.entries()) {
       const bytes = new Uint8Array(await (await handle.getFile()).arrayBuffer());
@@ -81,9 +81,9 @@ test('a reload keeps the todos, their state and their notes', async ({ page }) =
   await page.reload();
   await expect(items(page)).toHaveCount(4, { timeout: 60_000 });
   await expect(notice(page)).toHaveText(/^前回の状態を復元しました/);
-  // Restoring creates nothing: the boot is one GetQueueUrl, then the first Scan and receive.
+  // Restoring creates nothing: the boot is one GetQueueUrl, then the first Query and receive.
   const boot = page.getByRole('region', { name: 'SDK の呼び出し' }).getByRole('list', { name: '起動（保存した状態を復元） の SDK 呼び出し' });
-  await expect(boot.getByRole('listitem')).toHaveText([/GetQueueUrl/, /Scan/, /ReceiveMessage/]);
+  await expect(boot.getByRole('listitem')).toHaveText([/GetQueueUrl/, /Query/, /ReceiveMessage/]);
   await expect(page.getByRole('checkbox', { name: '「牛乳を買う」を未完了に戻す' })).toBeChecked();
   await expect(page.getByText('残り 1 件 / 全 4 件')).toBeVisible();
   await page.getByRole('button', { name: '「牛乳を買う」のメモ' }).click();

@@ -26,6 +26,7 @@ const messages = {
     'status.waiting': '待機中',
     'status.ready': '動作中',
     'status.failed': '停止',
+    'status.signedOut': '未サインイン',
 
     // Hero
     eyebrow: 'すべてブラウザの中で動きます',
@@ -94,6 +95,7 @@ const messages = {
     // What each action is called in the SDK call log
     'action.bootRestored': '起動（保存した状態を復元）',
     'action.bootFresh': '起動（テーブル・バケット・キューの作成と初期データ）',
+    'action.bootAws': '起動',
     'action.add': (title) => (title ? `${q(title)}を追加` : 'Todo を追加'),
     'action.done': (title) => `${q(title)}を完了にする`,
     'action.reopen': (title) => `${q(title)}を未完了に戻す`,
@@ -176,6 +178,23 @@ const messages = {
       { title: 'ブラウザの Worker で動かす', done: true },
       { title: 'MSW のハンドラから DynamoDB・S3・SQS を呼ぶ', done: false },
     ],
+    // The AWS build (VITE_API_URL set): the same page against the Lambda Web Function
+    'aws.eyebrow': 'AWS に接続しています',
+    'aws.lead': (strong) => [
+      'この Todo は、ブラウザ内のエミュレーターではなく ',
+      strong('Lambda Web Function にデプロイした同じ Hono の API'),
+      ' を呼びます。データは DynamoDB・S3・SQS の実リソースに入り、サインインしたユーザーごとに分かれます。',
+    ],
+    'aws.footer': 'データは AWS アカウントの DynamoDB・S3・SQS に保存されます。API は Cognito のアクセストークンを確かめてから応答します。',
+    'aws.signInTitle': 'サインインしてください',
+    'aws.signInBody': 'Todo はユーザーごとに分かれています。Cognito のサインイン画面に移動します。',
+    'aws.signIn': 'サインイン',
+    'aws.signOut': 'サインアウト',
+    'aws.title': 'AWS',
+    'aws.endpoint': 'API のエンドポイント',
+    'aws.signedInAs': 'サインイン中のユーザー',
+    'api.UNAUTHORIZED': 'サインインが切れました。もう一度サインインしてください',
+
     // API errors by their code (api/errors.js); the argument is the response body.
     'api.BAD_JSON': 'リクエストの本文が JSON ではありません',
     'api.TITLE_REQUIRED': 'タイトルを入力してください',
@@ -218,6 +237,7 @@ const messages = {
     'status.waiting': 'Waiting',
     'status.ready': 'Running',
     'status.failed': 'Stopped',
+    'status.signedOut': 'Signed out',
 
     eyebrow: 'Everything runs in your browser',
     lead: (strong) => [
@@ -281,6 +301,7 @@ const messages = {
 
     'action.bootRestored': 'Start (restore the saved state)',
     'action.bootFresh': 'Start (create the table, bucket and queue, and seed data)',
+    'action.bootAws': 'Start',
     'action.add': (title) => (title ? `Add “${title}”` : 'Add a todo'),
     'action.done': (title) => `Mark “${title}” as done`,
     'action.reopen': (title) => `Mark “${title}” as not done`,
@@ -358,6 +379,21 @@ const messages = {
       { title: 'Run it in a browser Worker', done: true },
       { title: 'Call DynamoDB, S3 and SQS from MSW handlers', done: false },
     ],
+    'aws.eyebrow': 'Connected to AWS',
+    'aws.lead': (strong) => [
+      'This Todo app calls ',
+      strong('the same Hono API, deployed as a Lambda Web Function'),
+      ' instead of the emulator in the browser. Data goes to real DynamoDB, S3 and SQS resources, separately for each signed-in user.',
+    ],
+    'aws.footer': 'Data is stored in DynamoDB, S3 and SQS in the AWS account. The API checks a Cognito access token before it answers.',
+    'aws.signInTitle': 'Sign in',
+    'aws.signInBody': 'Todos are kept per user. You will go to the Cognito sign-in page.',
+    'aws.signIn': 'Sign in',
+    'aws.signOut': 'Sign out',
+    'aws.title': 'AWS',
+    'aws.endpoint': 'API endpoint',
+    'aws.signedInAs': 'Signed in as',
+    'api.UNAUTHORIZED': 'Your session ended. Sign in again',
     'api.BAD_JSON': 'The request body is not JSON',
     'api.TITLE_REQUIRED': 'Enter a title',
     'api.TITLE_TOO_LONG': ({ max }) => `Keep the title to ${max} characters or fewer`,

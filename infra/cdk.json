@@ -1,0 +1,8 @@
+{
+  "app": "node bin/app.mjs",
+  "context": {
+    "allowedOrigins": ["http://localhost:5173", "https://daisuke-awaji.github.io"],
+    "appUrls": ["http://localhost:5173/", "https://daisuke-awaji.github.io/aws-emulator-wasm/"],
+    "retainData": true
+  }
+}

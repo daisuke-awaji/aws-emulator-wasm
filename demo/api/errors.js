@@ -11,6 +11,7 @@ const MESSAGES = {
   NOT_FOUND: () => 'Todo not found',
   NOTE_NOT_STRING: () => 'The note must be a string',
   NOTE_TOO_LONG: ({ max }) => `Keep the note to ${max} characters or fewer`,
+  UNAUTHORIZED: () => 'Sign in to use the API',
 };
 
 export class ApiError extends Error {

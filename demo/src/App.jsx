@@ -1,34 +1,21 @@
-import { ArrowUpRight, Boxes, Check, CornerDownLeft, FileText, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowUpRight, Boxes, Check, Cloud, CornerDownLeft, FileText, LogIn, LogOut, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { call } from './api-client.js';
 import { Architecture } from './Architecture.jsx';
 import { CallLog } from './CallLog.jsx';
-import { emulator, live, reloadAndTakeOver, resetAndReload } from './emulator.js';
-import { has, LANGS, locale, rich, setLang, t, useLang } from './i18n.js';
+import { LANGS, locale, rich, setLang, t, useLang } from './i18n.js';
+
+/**
+ * What the page runs against (runtime-emulator.js or runtime-aws.js): `target` is
+ * 'emulator' or 'aws', and the rest is what that target offers (tab lock and saves for the
+ * emulator, sign-in for AWS).
+ */
+const Runtime = createContext(null);
+const useRuntime = () => useContext(Runtime);
 
 const REPO = 'https://github.com/daisuke-awaji/aws-emulator-wasm';
 
 const EVENTS = ['created', 'completed', 'reopened', 'renamed', 'noted', 'deleted'];
-
-/** Calls the mocked REST API (relative to the page, so it works under any base path). */
-async function call(path, { method = 'GET', json, text } = {}) {
-  const init = { method, headers: {} };
-  if (json !== undefined) {
-    init.headers['content-type'] = 'application/json';
-    init.body = JSON.stringify(json);
-  } else if (text !== undefined) {
-    init.headers['content-type'] = 'text/plain; charset=utf-8';
-    init.body = text;
-  }
-  const res = await fetch(`api/${path}`, init);
-  if (!res.ok) {
-    // The API answers { code, message, ...params }; show the code's message in the page's language.
-    const body = await res.json().catch(() => ({}));
-    if (body.code && has(`api.${body.code}`)) throw new Error(t(`api.${body.code}`, body));
-    throw new Error(body.message ?? `${method} api/${path}: ${res.status}`);
-  }
-  if (res.status === 204) return null;
-  return (res.headers.get('content-type') ?? '').includes('json') ? res.json() : res.text();
-}
 
 function useElapsed(running) {
   const [seconds, setSeconds] = useState(0);
@@ -41,10 +28,11 @@ function useElapsed(running) {
   return seconds;
 }
 
-/** Re-renders when the emulator's lock or save state changes (see emulator.js). */
+/** Re-renders when the runtime's live state changes: lock and saves, or the signed-in user. */
 function useLive() {
+  const { live } = useRuntime();
   const [, setVersion] = useState(0);
-  useEffect(() => live.subscribe(() => setVersion((v) => v + 1)), []);
+  useEffect(() => live.subscribe(() => setVersion((v) => v + 1)), [live]);
   return live;
 }
 
@@ -77,21 +65,32 @@ function LangSwitch() {
   );
 }
 
-export function App({ mocking, readyIn }) {
+export function App({ runtime }) {
+  return (
+    <Runtime.Provider value={runtime}>
+      <Page />
+    </Runtime.Provider>
+  );
+}
+
+function Page() {
   useLang(); // everything below re-renders in the new language
+  const runtime = useRuntime();
+  const aws = runtime.target === 'aws';
   const [boot, setBoot] = useState({ state: 'loading' });
-  const { lock } = useLive();
+  const { lock, user } = useLive();
   const elapsed = useElapsed(boot.state === 'loading' && lock !== 'waiting');
 
   useEffect(() => {
-    Promise.all([mocking, readyIn]).then(
-      ([, { ms, persistence }]) => setBoot({ state: 'ready', ms, persistence }),
+    runtime.ready.then(
+      ({ ms, persistence }) => setBoot({ state: 'ready', ms, persistence }),
       (error) => setBoot({ state: 'failed', message: String(error?.message ?? error) }),
     );
-  }, [mocking, readyIn]);
+  }, [runtime]);
 
   // Another tab took the emulator over: this one is stopped, whatever it was doing.
-  const state = lock === 'lost' ? 'failed' : lock === 'waiting' && boot.state === 'loading' ? 'waiting' : boot.state;
+  let state = lock === 'lost' ? 'failed' : lock === 'waiting' && boot.state === 'loading' ? 'waiting' : boot.state;
+  if (aws && state === 'ready' && !user) state = 'signedOut';
 
   return (
     <>
@@ -112,9 +111,18 @@ export function App({ mocking, readyIn }) {
               <span className="dot" aria-hidden="true" />
               {t(`status.${state}`)}
             </span>
-            <a className="nav-link" href="sdk.html">
-              {t('nav.sdk')}
-            </a>
+            {aws ? (
+              user && (
+                <button type="button" className="nav-link" onClick={runtime.signOut}>
+                  <LogOut size={14} aria-hidden="true" />
+                  {t('aws.signOut')}
+                </button>
+              )
+            ) : (
+              <a className="nav-link" href="sdk.html">
+                {t('nav.sdk')}
+              </a>
+            )}
             <LangSwitch />
             <a className="icon-link" href={REPO} aria-label={t('nav.repo')}>
               <GitHubMark />
@@ -125,9 +133,9 @@ export function App({ mocking, readyIn }) {
 
       <div className="page">
         <header className="hero">
-          <p className="eyebrow">{t('eyebrow')}</p>
+          <p className="eyebrow">{t(aws ? 'aws.eyebrow' : 'eyebrow')}</p>
           <h1>Todo</h1>
-          <p className="lead">{rich('lead', (text) => <strong>{text}</strong>)}</p>
+          <p className="lead">{rich(aws ? 'aws.lead' : 'lead', (text) => <strong>{text}</strong>)}</p>
         </header>
 
         {/* Cards that need an action come before the diagram, so a phone shows them at once. */}
@@ -137,7 +145,7 @@ export function App({ mocking, readyIn }) {
               <h2 id="waiting-title">{t('waiting.title')}</h2>
               <p className="muted">{t('waiting.body')}</p>
               <p>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => emulator.takeOver()}>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => runtime.takeOver()}>
                   {t('tab.useHere')}
                 </button>
               </p>
@@ -150,14 +158,28 @@ export function App({ mocking, readyIn }) {
               <h2 id="lost-title">{t('lost.title')}</h2>
               <p className="muted">{t('lost.body')}</p>
               <p>
-                <button type="button" className="btn btn-primary btn-sm" onClick={reloadAndTakeOver}>
+                <button type="button" className="btn btn-primary btn-sm" onClick={runtime.reloadAndTakeOver}>
                   {t('tab.useHere')}
                 </button>
               </p>
             </div>
           </section>
         )}
-        <Architecture state={state === 'waiting' ? 'loading' : state} />
+        {!aws && <Architecture state={state === 'waiting' ? 'loading' : state} />}
+        {state === 'signedOut' && (
+          <section className="card boot" aria-labelledby="signin-title">
+            <div>
+              <h2 id="signin-title">{t('aws.signInTitle')}</h2>
+              <p className="muted">{t('aws.signInBody')}</p>
+              <p>
+                <button type="button" className="btn btn-primary btn-sm" onClick={runtime.signIn}>
+                  <LogIn size={14} aria-hidden="true" />
+                  {t('aws.signIn')}
+                </button>
+              </p>
+            </div>
+          </section>
+        )}
 
         {state === 'loading' && (
           <section className="card boot" role="status" aria-live="polite">
@@ -166,7 +188,7 @@ export function App({ mocking, readyIn }) {
               <p>
                 {t('boot.loading')} <span className="mono">{t('seconds', elapsed.toFixed(1))}</span>
               </p>
-              <p className="muted">{t('boot.firstTime')}</p>
+              {!aws && <p className="muted">{t('boot.firstTime')}</p>}
             </div>
           </section>
         )}
@@ -179,9 +201,9 @@ export function App({ mocking, readyIn }) {
         {state === 'ready' && <Todos bootMs={boot.ms} persistence={boot.persistence} />}
 
         <footer className="footer">
-          <p>{t('footer')}</p>
+          <p>{t(aws ? 'aws.footer' : 'footer')}</p>
           <p className="footer-links">
-            <a href="sdk.html">{t('footer.sdk')}</a>
+            {!aws && <a href="sdk.html">{t('footer.sdk')}</a>}
             <a href={REPO}>
               GitHub
               <ArrowUpRight size={13} aria-hidden="true" />
@@ -194,6 +216,8 @@ export function App({ mocking, readyIn }) {
 }
 
 function Todos({ bootMs, persistence }) {
+  const runtime = useRuntime();
+  const aws = runtime.target === 'aws';
   const [todos, setTodos] = useState(null);
   const [error, setError] = useState('');
   const [activity, setActivity] = useState([]);
@@ -223,23 +247,26 @@ function Todos({ bootMs, persistence }) {
     } catch (e) {
       setError(e.message);
     }
-    try {
-      const emu = await call(`emulator?since=${seen.current}`);
-      const calls = emu.calls ?? [];
-      if (calls.length) seen.current = calls[calls.length - 1].seq;
-      setStats(emu);
-      const id = ++groupId.current;
-      setGroups((old) => [{ id, label, ok, at: new Date().toISOString(), calls }, ...old].slice(0, 8));
-    } catch {
-      // The counter is informational; a failure here must not hide the change itself.
+    // The SDK call log exists only where the emulator answers in the page.
+    if (!aws) {
+      try {
+        const emu = await call(`emulator?since=${seen.current}`);
+        const calls = emu.calls ?? [];
+        if (calls.length) seen.current = calls[calls.length - 1].seq;
+        setStats(emu);
+        const id = ++groupId.current;
+        setGroups((old) => [{ id, label, ok, at: new Date().toISOString(), calls }, ...old].slice(0, 8));
+      } catch {
+        // The counter is informational; a failure here must not hide the change itself.
+      }
     }
     setBusy(false);
     return ok;
-  }, []);
+  }, [aws]);
 
   useEffect(() => {
-    run([persistence?.restored ? 'action.bootRestored' : 'action.bootFresh'], async () => {});
-  }, [run, persistence]);
+    run([aws ? 'action.bootAws' : persistence?.restored ? 'action.bootRestored' : 'action.bootFresh'], async () => {});
+  }, [run, persistence, aws]);
 
   const add = async (event) => {
     event.preventDefault();
@@ -306,6 +333,7 @@ function Todos({ bootMs, persistence }) {
       </main>
 
       <aside className="side">
+        {aws && <AwsCard />}
         {stats && (
           <section className="card" aria-labelledby="emu-title">
             <div className="card-head">
@@ -367,8 +395,36 @@ function Todos({ bootMs, persistence }) {
         </section>
       </aside>
 
-      <CallLog groups={groups} />
+      {!aws && <CallLog groups={groups} />}
     </div>
+  );
+}
+
+/** The AWS build: where the API is, and who is signed in. */
+function AwsCard() {
+  const runtime = useRuntime();
+  const { user } = useLive();
+  return (
+    <section className="card" aria-labelledby="aws-title">
+      <div className="card-head">
+        <h2 id="aws-title">{t('aws.title')}</h2>
+        <span className="badge">
+          <Cloud size={12} aria-hidden="true" /> Lambda Web Function
+        </span>
+      </div>
+      <dl className="aws-facts">
+        <div>
+          <dt>{t('aws.endpoint')}</dt>
+          <dd className="mono" data-testid="api-host">
+            {new URL(runtime.apiUrl).host}
+          </dd>
+        </div>
+        <div>
+          <dt>{t('aws.signedInAs')}</dt>
+          <dd>{user?.profile?.email ?? user?.profile?.sub}</dd>
+        </div>
+      </dl>
+    </section>
   );
 }
 
@@ -391,6 +447,7 @@ function PersistNotice({ persistence }) {
 
 /** The last save, and the way back to the seed data. */
 function SaveState({ persistence, busy }) {
+  const { resetAndReload } = useRuntime();
   const { lastSave, saveError } = useLive();
   const [confirming, setConfirming] = useState(false);
   const [resetting, setResetting] = useState(false);
