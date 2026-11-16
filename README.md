@@ -2,7 +2,7 @@
 
 [AWS Emulator](https://github.com/aws/aws-emulator) をブラウザの中で動かす試みです。React アプリのモック API（MSW）の接続先にして、**GitHub Pages などの静的配信だけで完結するモックアプリ**を作れるようにすることが目標です。
 
-> 状態：**Phase 0 完了**。DynamoDB・SQS（と依存 12 サービス）が `wasm32-wasip1` 向けの `cargo check` を通りました。ビルド・実行はまだです（[Phase 0 レポート](./docs/phase0-report.md)）。
+> 状態：**Phase 0.5 完了**。`wasm32-wasip1` にビルドしたエミュレーターに Node から AWS SDK v3 で DynamoDB・SQS を呼び、往復が通りました（wasm-opt 後 26.6 MB、brotli で 5.4 MB）。ブラウザ対応はこれからです（[Phase 0.5 レポート](./docs/phase05-report.md)）。
 
 ## なぜ
 
@@ -16,6 +16,7 @@ React アプリ ─ fetch ─▶ MSW ─▶ ハンドラ ─ AWS SDK v3 ─▶ W
 
 - [PLAN.md](./PLAN.md)：計画書（構成、上流の調査結果、設計判断、段階計画、リスク）
 - [docs/phase0-report.md](./docs/phase0-report.md)：Phase 0（wasm 向けビルド検証）の結果
+- [docs/phase05-report.md](./docs/phase05-report.md)：Phase 0.5（wasm のビルドと Node での往復）の結果
 
 ## 上流
 
@@ -32,4 +33,8 @@ React アプリ ─ fetch ─▶ MSW ─▶ ハンドラ ─ AWS SDK v3 ─▶ W
 | `scripts/trim_workspace.py` | workspace の members を閉包に絞り、dev-dependencies を外す |
 | `scripts/patch_wasm.py` | wasm32 用のパッチ集（P1〜P4）。`patches/files/` を使う |
 
-手順の詳細は [Phase 0 レポートの「再現手順」](./docs/phase0-report.md#7-再現手順)を参照してください。
+| `crates/wasm-host/` | wasm の入口（router と C ABI） |
+| `js/` | Node 用ローダー、SDK v3 の request handler、テスト |
+| `.github/workflows/wasm.yml` | CI：ビルド、wasm-opt、サイズ計測、Node テスト、artifact |
+
+手順の詳細は [Phase 0.5 レポートの「再現」](./docs/phase05-report.md#5-再現)を参照してください。
