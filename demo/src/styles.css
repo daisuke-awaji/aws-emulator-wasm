@@ -201,11 +201,48 @@ textarea { resize: vertical; line-height: 1.5; }
 .call-op { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .call-status.ok { color: var(--success); }
 .call-status.ng { color: var(--danger); }
+/* One SDK execution: a row that opens to the input and output */
+.sdk-call + .sdk-call { border-top: 1px solid var(--border); }
+.sdk-call summary { cursor: pointer; list-style: none; }
+.sdk-call summary::-webkit-details-marker { display: none; }
+.sdk-call summary:hover { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.sdk-call[open] summary, .sdk-call details[open] > summary { background: var(--surface-2); }
+.call-row.no-route { grid-template-columns: 44px 110px minmax(0, 1fr) 44px 72px; }
+.call-wire { color: var(--muted); font-weight: 400; }
+.sdk-io { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; padding: 4px 12px 12px; border-top: 1px solid var(--border); background: var(--surface-2); }
+.sdk-io h4 { margin: 8px 0 4px; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.sdk-io pre { margin: 0; max-height: 260px; overflow: auto; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-size: 11.5px; line-height: 1.5; white-space: pre; }
+.sdk-io pre.ng { color: var(--danger); }
+.sdk-call { container-type: inline-size; }
+@container (max-width: 760px) { .sdk-io { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+/* On a phone, wrap long lines rather than hide them behind a sideways scroll. */
+@container (max-width: 520px) { .sdk-io pre { white-space: pre-wrap; overflow-wrap: anywhere; } }
+
+/* The SDK an action ran, shown under its Todo (or under the form for add and delete) */
+.trace { margin: 10px 0 2px 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; animation: trace-in 0.2s ease-out; }
+.add + .trace, .error + .trace { margin: 0 16px 12px; }
+@keyframes trace-in { from { opacity: 0; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .trace { animation: none; } }
+.trace-head { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 4px 4px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.trace-title { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.trace-head code { overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 11.5px; }
+.trace-head .call-count { margin-left: auto; }
+.trace .call-rows { margin: 0; border: 0; border-radius: 0; background: transparent; }
+.trace .call-op { white-space: normal; overflow-wrap: anywhere; }
+.trace-empty { margin: 0; padding: 10px 12px; font-size: 12.5px; }
+.trace-reloads { border-top: 1px solid var(--border); }
+.trace-reloads > summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 36px; padding: 4px 12px; cursor: pointer; list-style: none; font-size: 12.5px; }
+.trace-reloads > summary::-webkit-details-marker { display: none; }
+.trace-reloads[open] > summary .chev { transform: rotate(90deg); }
+.trace-reloads > .call-rows { border-top: 1px solid var(--border); }
+.btn-icon { min-height: 28px; width: 28px; padding: 0; }
+
 @media (max-width: 640px) {
-  .call-row { grid-template-columns: 34px auto minmax(0, 1fr) auto; grid-template-areas: 'seq svc op ms' 'seq route route status'; row-gap: 2px; }
+  .call-row, .call-row.no-route { grid-template-columns: 34px auto minmax(0, 1fr) auto; grid-template-areas: 'seq svc status ms' 'seq op op op' 'seq route route route'; row-gap: 2px; }
   .call-seq { grid-area: seq; align-self: start; }
   .call-service { grid-area: svc; }
-  .call-op { grid-area: op; }
+  .call-op { grid-area: op; white-space: normal; overflow-wrap: anywhere; }
+  .call-row.no-route { grid-template-areas: 'seq svc status ms' 'seq op op op'; }
   .call-ms { grid-area: ms; }
   .call-route { grid-area: route; }
   .call-status { grid-area: status; text-align: right; }
@@ -232,6 +269,7 @@ textarea { resize: vertical; line-height: 1.5; }
   .hero { padding: 36px 0 28px; }
   .btn-text { display: none; }
   .note { margin-left: 0; }
+  .trace { margin-left: 0; }
 }
 
 /* Architecture diagram: 3 steps in a row, then one straight arrow down into the emulator.

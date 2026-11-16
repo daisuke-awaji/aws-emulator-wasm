@@ -23,8 +23,10 @@ test.afterEach(async ({ page }) => {
   expect(seen.errors).toEqual([]);
 });
 
-const items = (page) => page.getByRole('list', { name: 'Todo の一覧' }).getByRole('listitem');
-const item = (page, title) => items(page).filter({ hasText: title });
+// Only the Todos themselves: an SDK trace under a Todo is a list of its own.
+const items = (page) => page.getByRole('list', { name: 'Todo の一覧' }).locator(':scope > li');
+// Matched on the Todo's own row: the SDK output under a Todo can mention other titles.
+const item = (page, title) => items(page).filter({ has: page.locator(':scope > .row', { hasText: title }) });
 const activity = (page) => page.getByRole('list', { name: '変更の記録' }).getByRole('listitem');
 
 test('shows the seeded todos from DynamoDB', async ({ page }) => {
@@ -123,7 +125,7 @@ test('the SDK call log shows what one action costs, and the counter includes it'
   await page.getByLabel('新しい Todo').fill('牛乳を買う');
   await page.getByRole('button', { name: '追加' }).click();
   await expect(item(page, '牛乳を買う')).toBeVisible();
-  const added = log.getByRole('list', { name: 'Todo を追加 の SDK 呼び出し' }).getByRole('listitem');
+  const added = log.getByRole('list', { name: '「牛乳を買う」を追加 の SDK 呼び出し' }).getByRole('listitem');
   await expect(added).toHaveText([
     /POST \/api\/todos.*DynamoDB.*PutItem.*200/,
     /POST \/api\/todos.*SQS.*SendMessage.*200/,
@@ -141,6 +143,75 @@ test('the SDK call log shows what one action costs, and the counter includes it'
   await expect(page.getByRole('alert')).toHaveText('タイトルを入力してください');
   await expect(page.getByTestId('last-calls')).toHaveText('0 回');
   await expect(page.getByTestId('requests')).toHaveText('19 回');
+});
+
+test('each Todo action shows the SDK it ran right under the Todo, with the input and output', async ({ page }) => {
+  const title = SEEDS[2];
+  await page.getByRole('checkbox', { name: `「${title}」を完了にする` }).check();
+  const trace = item(page, title).getByRole('region', { name: `「${title}」を完了にする で実行した SDK` });
+  await expect(trace).toBeVisible();
+  await expect(trace.getByTestId('trace-count')).toHaveText('2 回');
+  await expect(trace.getByRole('list', { name: `「${title}」を完了にする の SDK` }).getByRole('listitem')).toHaveText([
+    /DynamoDB.*docs\.send\(UpdateCommand\).*UpdateItem.*200/,
+    /SQS.*sqs\.send\(SendMessageCommand\).*200/,
+  ]);
+  // The row opens to what backend.js passed to the SDK, and what came back.
+  const update = trace.getByRole('listitem').filter({ hasText: 'UpdateCommand' });
+  await update.locator('summary').click();
+  const input = JSON.parse(await update.getByLabel(/の入力$/).textContent());
+  expect(input).toMatchObject({ TableName: 'todos', UpdateExpression: 'SET done = :done', ExpressionAttributeValues: { ':done': true } });
+  const output = JSON.parse(await update.getByLabel(/の出力$/).textContent());
+  expect(output.Attributes).toMatchObject({ title, done: true });
+  // The reload after the change is listed apart.
+  const reloads = trace.locator('details.trace-reloads');
+  await expect(reloads.locator(':scope > summary')).toContainText('画面の読み直し 4 回');
+  await reloads.locator(':scope > summary').click();
+  await expect(reloads.getByRole('listitem')).toHaveCount(4);
+
+  // A note that does not exist yet: S3 answers NoSuchKey, and the handler treats it as an empty note.
+  const other = SEEDS[1];
+  await page.getByRole('button', { name: `「${other}」のメモ` }).click();
+  const noteTrace = item(page, other).getByRole('region', { name: `「${other}」のメモを開く で実行した SDK` });
+  await expect(noteTrace.getByRole('listitem').first()).toContainText(/s3\.send\(GetObjectCommand\).*404/);
+  await noteTrace.getByRole('listitem').first().locator('summary').click();
+  await expect(noteTrace.getByLabel(/のエラー$/)).toHaveText(/^NoSuchKey: /);
+  // Only the latest action shows: the first trace is gone.
+  await expect(trace).toHaveCount(0);
+
+  // Saving the note: hasNote on the item, the object in S3, then the change event.
+  await page.getByRole('textbox', { name: 'メモ（S3 に保存）' }).fill('豆乳も');
+  await page.getByRole('button', { name: 'メモを保存' }).click();
+  const saved = item(page, other).getByRole('region', { name: `「${other}」のメモを保存 で実行した SDK` });
+  await expect(saved.getByRole('list', { name: /の SDK$/ }).getByRole('listitem')).toHaveText([/UpdateCommand/, /PutObjectCommand/, /SendMessageCommand/]);
+  const put = saved.getByRole('listitem').filter({ hasText: 'PutObjectCommand' });
+  await put.locator('summary').click();
+  expect(JSON.parse(await put.getByLabel(/の入力$/).textContent())).toMatchObject({ Bucket: 'todo-notes', Body: '豆乳も' });
+
+  // A rejected rename makes no SDK call, and says so.
+  await page.getByRole('button', { name: `「${other}」を編集` }).click();
+  await page.getByLabel('タイトル').fill('  ');
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  // While editing, the row shows an input instead of the title.
+  const rejected = page.getByRole('region', { name: `「${other}」の名前を変更 で実行した SDK` });
+  await expect(rejected.getByTestId('trace-count')).toHaveText('0 回');
+  await expect(rejected).toContainText('SDK は呼ばれていません');
+  await page.getByRole('button', { name: 'やめる' }).click();
+
+  // Delete: the Todo is gone, so its SDK calls show under the form. It can be closed.
+  await page.getByRole('button', { name: `「${title}」を削除` }).click();
+  await expect(item(page, title)).toHaveCount(0);
+  const deleted = page.getByRole('region', { name: `「${title}」を削除 で実行した SDK` });
+  await expect(deleted.getByRole('list', { name: /の SDK$/ }).getByRole('listitem')).toHaveText([
+    /docs\.send\(DeleteCommand\).*DeleteItem/,
+    /s3\.send\(DeleteObjectCommand\)/,
+    /sqs\.send\(SendMessageCommand\)/,
+  ]);
+  await deleted.getByRole('button', { name: 'SDK の実行を閉じる' }).click();
+  await expect(deleted).toHaveCount(0);
+
+  // The same calls are in the log below, under the action's name.
+  const log = page.getByRole('region', { name: 'SDK の呼び出し' });
+  await expect(log.getByRole('list', { name: `「${title}」を削除 の SDK 呼び出し` }).getByRole('listitem')).toHaveCount(7);
 });
 
 test('no horizontal scrolling and the Geist fonts are served from the site', async ({ page }) => {

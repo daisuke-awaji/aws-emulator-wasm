@@ -35,3 +35,8 @@
 - 画面を Vercel（Geist）風に作り直した。Geist と Geist Mono（OFL）を同梱し、外部へのリクエストはなし。ライトとダークの両方。
 - 内部のアーキテクチャ図を draw.io で作った（`docs/architecture/architecture.drawio`、`scripts/architecture.py` が生成し、直線であることと重なりがないことを確かめる）。README に PNG を貼った。
 - Playwright 18 件（9 テスト × デスクトップ・スマートフォン）pass、Node 17 件 pass。
+
+## 2026-11-16 Todo の操作ごとに SDK の実行を出す
+- Todo を操作すると、その Todo の下に、実行した SDK（例：`docs.send(UpdateCommand)`、`sqs.send(SendMessageCommand)`）が出る。行を開くと入力と出力（エラーならその名前と文）。追加と削除は入力欄の下。読み直しの呼び出しは「画面の読み直し」にまとめた。下の「SDK の呼び出し」欄の行も同じように開ける。
+- 仕組み：各クライアントの `send` を包んでコマンド名・入力・出力を残し、HTTP 要求の `x-demo-sdk-call` ヘッダーで onCall の応答と結び付ける。コマンド名は SDK の `context.commandName` から取る（ビルドでクラス名が縮むため）。lib-dynamodb のコマンドは PutItemCommand → PutCommand のように戻す。
+- e2e：Todo の一覧は直下の li だけを数えるようにした（Todo の下の SDK の行も li のため）。新しいテスト 1 件（完了・メモを開く〔NoSuchKey〕・メモを保存・名前の変更が弾かれる〔0 回〕・削除・閉じる）。Playwright 20 件 pass。

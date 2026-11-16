@@ -5,7 +5,7 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { SQSClient } from '@aws-sdk/client-sqs';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createEmulator } from 'aws-emulator-wasm/browser';
-import { recordCall } from './calls.js';
+import { instrument, recordCall } from './calls.js';
 
 const started = performance.now();
 
@@ -19,7 +19,8 @@ export const emulator = createEmulator({
 export const readyIn = emulator.ready.then(() => performance.now() - started);
 
 const config = emulator.clientConfig();
-export const ddb = new DynamoDBClient(config);
-export const docs = DynamoDBDocumentClient.from(ddb, { marshallOptions: { removeUndefinedValues: true } });
-export const s3 = new S3Client({ ...config, forcePathStyle: true });
-export const sqs = new SQSClient(config);
+// The variable names are the ones backend.js uses; the call log shows them, e.g. docs.send(PutCommand).
+export const ddb = instrument(new DynamoDBClient(config), 'ddb');
+export const docs = instrument(DynamoDBDocumentClient.from(ddb, { marshallOptions: { removeUndefinedValues: true } }), 'docs');
+export const s3 = instrument(new S3Client({ ...config, forcePathStyle: true }), 's3');
+export const sqs = instrument(new SQSClient(config), 'sqs');
