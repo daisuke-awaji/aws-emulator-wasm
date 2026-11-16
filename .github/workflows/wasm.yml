@@ -26,7 +26,7 @@ env:
   WASM: target/wasm32-wasip1/release/aws_emulator_wasm_host.wasm
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     defaults:
@@ -118,13 +118,14 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install JS dependencies
+        run: npm ci --no-audit --no-fund
+
       - name: JS tests against the cargo build
-        working-directory: js
         env:
           EMULATOR_WASM: ${{ github.workspace }}/${{ env.WASM }}
         run: |
-          npm ci --no-audit --no-fund
-          npm test 2>&1 | tee "$RUNNER_TEMP/test-raw.log"
+          npm test -w js 2>&1 | tee "$RUNNER_TEMP/test-raw.log"
           {
             echo
             echo "### Node (cargo build)"
@@ -135,10 +136,9 @@ jobs:
 
       - name: JS tests against the wasm-opt build
         if: steps.opt.outcome == 'success'
-        working-directory: js
         env:
           EMULATOR_WASM: ${{ github.workspace }}/target/aws-emulator.opt.wasm
-        run: npm test
+        run: npm test -w js
 
       - uses: actions/upload-artifact@v4
         with:
@@ -148,3 +148,79 @@ jobs:
             target/aws-emulator.opt.wasm
           if-no-files-found: error
           retention-days: 14
+
+  browser:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      # The site is built and tested as GitHub Pages serves it: under /<repository>/.
+      BASE_PATH: /${{ github.event.repository.name }}/
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: aws-emulator-wasm
+          path: ${{ runner.temp }}/wasm
+
+      - name: Install JS dependencies and Chromium
+        run: |
+          npm ci --no-audit --no-fund
+          npx -w demo playwright install --with-deps chromium
+
+      - name: Build the demo site
+        run: |
+          W="$RUNNER_TEMP/wasm"
+          if [ -f "$W/aws-emulator.opt.wasm" ]; then src="$W/aws-emulator.opt.wasm"; else src=$(find "$W" -name aws_emulator_wasm_host.wasm); fi
+          EMULATOR_WASM="$src" npm run wasm -w demo
+          npm run build -w demo
+          ls -l demo/dist demo/dist/assets
+
+      - name: Playwright (Chromium, desktop and mobile)
+        env:
+          CI: "true"
+        run: |
+          npm run test:e2e -w demo 2>&1 | tee "$RUNNER_TEMP/e2e.log"
+          {
+            echo "## Browser (Chromium)"
+            echo
+            echo '```'
+            grep -E 'passed|failed|flaky|skipped|^\[(desktop|mobile)\]$|^(ready|dynamodb|s3|sqs) ' "$RUNNER_TEMP/e2e.log" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            demo/playwright-report
+            demo/test-results
+          retention-days: 7
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          path: demo/dist
+
+  deploy:
+    needs: browser
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

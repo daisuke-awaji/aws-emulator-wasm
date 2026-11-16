@@ -1,31 +1,26 @@
-// Loads the emulator wasm in Node (node:wasi) and serves requests through its C ABI.
+// Loads the emulator wasm in Node and serves requests through its C ABI.
 import { readFile } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 import { WASI } from 'node:wasi';
-import { decodeResponse, encodeRequest } from './codec.mjs';
+import { instantiateEmulator } from './core.mjs';
+import { createWasi } from './wasi.mjs';
 
 /**
  * @param {string} wasmPath
- * @returns {Promise<{ fetch: (req: {method: string, url: string, headers: [string, string][], body: Uint8Array}) => {status: number, headers: [string, string][], body: Uint8Array}, tick: () => void }>}
+ * @param {{ wasi?: 'node' | 'shim', clock?: 'virtual' | 'real' }} [options]
+ *   wasi: 'node' uses node:wasi (real clocks); 'shim' uses the same WASI code as the browser.
  */
-export async function loadEmulator(wasmPath) {
-  const wasi = new WASI({ version: 'preview1', args: ['aws-emulator'], env: {}, returnOnExit: true });
+export async function loadEmulator(wasmPath, options = {}) {
   const module = await WebAssembly.compile(await readFile(wasmPath));
-  const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
-  wasi.initialize(instance);
-  const e = instance.exports;
-
-  return {
-    fetch(req) {
-      const frame = encodeRequest(req);
-      const ptr = e.emu_alloc(frame.length);
-      // Views are taken after every call into wasm: memory.grow detaches the old buffer.
-      new Uint8Array(e.memory.buffer, ptr, frame.length).set(frame);
-      const len = e.emu_handle(ptr, frame.length);
-      const out = new Uint8Array(e.memory.buffer, e.emu_response_ptr(), len).slice();
-      return decodeResponse(out);
-    },
-    tick() {
-      e.emu_tick();
-    },
-  };
+  if ((options.wasi ?? 'node') === 'shim') {
+    return instantiateEmulator(module, createWasi({ clock: options.clock }));
+  }
+  const wasi = new WASI({ version: 'preview1', args: ['aws-emulator'], env: {}, returnOnExit: true });
+  return instantiateEmulator(module, {
+    imports: wasi.getImportObject(),
+    initialize: (instance) => wasi.initialize(instance),
+  });
 }
+
+/** Response bodies as the Node SDK expects them for streaming outputs (S3 GetObject). */
+export const nodeResponseBody = (bytes) => Readable.from([Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)]);

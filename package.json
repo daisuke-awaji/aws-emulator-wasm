@@ -1,0 +1,7 @@
+{
+  "name": "aws-emulator-wasm-repo",
+  "private": true,
+  "type": "module",
+  "workspaces": ["js", "demo"],
+  "engines": { "node": ">=22" }
+}

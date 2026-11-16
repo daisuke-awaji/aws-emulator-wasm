@@ -1,9 +1,11 @@
 {
-  "name": "aws-emulator-wasm-js",
+  "name": "aws-emulator-wasm",
   "private": true,
   "type": "module",
-  "description": "JS host for the aws-emulator wasm build: loader, SDK request handler and tests",
-  "engines": { "node": ">=22" },
+  "description": "JS host for the aws-emulator wasm build: WASI shim, Node and browser loaders, SDK v3 request handler",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test test/*.test.mjs"
   },
@@ -13,6 +15,16 @@
   },
   "devDependencies": {
     "@aws-sdk/client-dynamodb": "^3",
+    "@aws-sdk/client-s3": "^3",
     "@aws-sdk/client-sqs": "^3"
+  },
+  "exports": {
+    "./browser": "./src/browser/index.mjs",
+    "./browser/worker": "./src/browser/worker.mjs",
+    "./node": "./src/emulator.mjs",
+    "./handler": "./src/handler.mjs",
+    "./wasi": "./src/wasi.mjs",
+    "./codec": "./src/codec.mjs",
+    "./scenarios": "./test/scenarios.mjs"
   }
 }

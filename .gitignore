@@ -1,2 +1,9 @@
 .upstream/
 target/
+node_modules/
+demo/dist/
+demo/public/aws-emulator.wasm
+test-results/
+playwright-report/
+demo/playwright-report/
+demo/test-results/
