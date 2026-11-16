@@ -101,7 +101,7 @@ Node has its own loader: `aws-emulator-wasm/node`.
 
 ```mermaid
 flowchart TB
-  P["GitHub Pages<br/>static files only"] -- "one download: HTML, JS, wasm" --> UI
+  P["GitHub Pages<br/>static files only"] -- "one download: HTML, JS, wasm" --> tab
   subgraph tab["Browser tab"]
     direction LR
     UI["React<br/>fetch('/api/todos')"] --> SW["MSW<br/>Service Worker"]
