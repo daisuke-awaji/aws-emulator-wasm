@@ -49,7 +49,7 @@ flowchart LR
 ## 5. 設計判断
 
 1. **ビルドターゲット**：まず `wasm32-wasip1` と、ブラウザ用の WASI シム（例：`@bjorn3/browser_wasi_shim`）を試す。std の fs / 時刻 / 乱数がそのまま動き、C の依存も wasi-sdk でビルドしやすい。だめなら `wasm32-unknown-unknown` + wasm-bindgen。
-2. **スレッドなし**：GitHub Pages は COOP/COEP ヘッダーを付けられないので SharedArrayBuffer が使えない。ヘッダーを補う Service Worker の手もあるが、MSW の Service Worker と衝突する。tokio は `current_thread` 相当で動かす。
+2. **スレッドなし**：GitHub Pages は COOP/COEP ヘッダーを付けられないので SharedArrayBuffer が使えない。ヘッダーを補う Service Worker の手もあるが、MSW の Service Worker と衝突する。tokio は `current_thread` 相当で動かす。待ち（`sleep`）は止まって待てないので、WASI シムが仮想時計を進めて即座に返す（Phase 1 で実装）。
 3. **自前の router**：使うサービスだけを登録する。登録していないサービスには上流と同じ「未実装」の応答を返す。
 4. **パッチは最小・機械的に**：`patches/` に差分を置き、`scripts/sync-upstream.sh` で上流の指定 commit を取得して当てる。上流の commit は固定し、更新は明示的に行う。
 5. **永続化**：エンジンに状態の書き出し機能がなければ、状態を変えるリクエストを記録しておき、起動時に再生する。
@@ -62,8 +62,8 @@ flowchart LR
 |---|---|---|
 | 0 検証 ✅ | DynamoDB・SQS とその依存（12 サービス）を wasm 向けに `cargo check` し、壊れる箇所を一覧にする | `docs/phase0-report.md` に、壊れたクレートと理由、対処案がある（2026-11-15 完了：パッチ 7 か所で exit 0） |
 | 0.5 ビルドと実行 ✅ | host クレートと自前の router を作り、`.wasm` をビルドして Node の WASI で往復させる | CreateTable・PutItem・GetItem・SendMessage が往復する。サイズを計測（2026-11-16 完了：CI で 8 テスト pass、wasm-opt 後 26.6 MB / brotli 5.4 MB） |
-| 1 最小動作 | DynamoDB・S3・SQS を Worker で動かし、MSW から使う Todo デモを GitHub Pages に公開 | ブラウザで CRUD が通る。Playwright のテストが緑 |
-| 2 実用化 | スナップショット、複数タブ、wasm のサイズ削減、読み込みの遅延 | リロード後も状態が残る。初回読み込みの目標サイズ（Phase 1 で計測して決める） |
+| 1 最小動作 ✅ | DynamoDB・S3・SQS を Worker で動かし、MSW から使う Todo デモを GitHub Pages に公開 | ブラウザで CRUD が通る。Playwright のテストが緑（2026-11-16 完了：Playwright 12 テスト pass、<https://daisuke-awaji.github.io/aws-emulator-wasm/>） |
+| 2 実用化 | スナップショット、複数タブ、wasm のサイズ削減、読み込みの遅延、panic からの復旧 | リロード後も状態が残る。初回読み込みの目標サイズ（Phase 1 の実測：gzip で 8.8 MiB。目標は Phase 2 の最初に決める） |
 | 3 拡張 | Lambda（Python から）、Cognito など | 選んだサービスの代表的な操作が通る |
 
 ## 7. リスク
@@ -80,4 +80,4 @@ flowchart LR
 
 - 最初に載せるサービスの最終決定（仮：DynamoDB・S3・SQS）。
 - Phase 1 以降のビルド環境（GitHub Actions の大きいランナーなど）。
-- リポジトリの公開範囲。Pages を無料で使うなら public が必要（今は private）。
+- ~~リポジトリの公開範囲~~：public に変更済み（2026-11-16）。Pages は GitHub Actions からデプロイする設定にした。
