@@ -26,7 +26,7 @@ INK = "#232F3E"
 MUTED = "#5F6B7A"
 FRAME = "#9CA3AF"
 FONT = "fontFamily=Helvetica;"
-R = "rounded=1;absoluteArcSize=1;arcSize=24;"   # the one corner radius, for every frame and box
+R = "rounded=0;"                                # square corners, for every frame and box
 LOGO = 72                                       # logo and icon size
 ICON = 60
 LABEL_FONT = 16
@@ -56,9 +56,17 @@ def aws(d, label, x, y, res, color, size=ICON, label_at="right"):
     return d.vertex(label, x, y, size, size, style)
 
 
-def frame(d, label, x, y, w, h, stroke, fill, dashed=False):
-    style = (f"{R}html=1;whiteSpace=wrap;fillColor={fill};strokeColor={stroke};strokeWidth=2;dashed={int(dashed)};"
-             f"fontSize=18;fontStyle=1;fontColor={INK};{FONT}align=left;verticalAlign=top;spacingLeft=16;spacingTop=8;")
+def frame(d, label, x, y, w, h, stroke, fill, dashed=False, icon=None):
+    """A titled frame. icon: an image name, or 'aws' for the AWS Cloud group's own logo."""
+    if icon == "aws":
+        shape = "shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud_alt;spacingLeft=34;spacingTop=4;"
+    elif icon:
+        shape = (f"shape=label;image={img(icon)};imageWidth=26;imageHeight=26;imageAlign=left;imageVerticalAlign=top;"
+                 f"spacingLeft=34;spacingTop=4;")
+    else:
+        shape = "spacingLeft=16;spacingTop=8;"
+    style = (f"{R}{shape}html=1;whiteSpace=wrap;fillColor={fill};strokeColor={stroke};strokeWidth=2;dashed={int(dashed)};"
+             f"fontSize=18;fontStyle=1;fontColor={INK};{FONT}align=left;verticalAlign=top;points=[];")
     return d.vertex(label, x, y, w, h, style)
 
 
@@ -66,63 +74,69 @@ def edge(d, src, dst, label="", color=C.BLUE, **kw):
     return d.edge(src, dst, label, color=color, extra=f"fontSize={EDGE_FONT};strokeWidth=2.5;{FONT}", **kw)
 
 
-d = Diagram(name="How it works", page_w=1500, page_h=1010)
+d = Diagram(name="How it works", page_w=1500, page_h=1110)
 
-# Shared layout: the page on the left, the services in one column on the right.
+# Two mirrored rows on shared columns: MSW and Lambda in one column, Hono in the next, the
+# services in the last. React sits between the rows and switches between them.
 X_REACT = 200
 REACT_CX = X_REACT + LOGO / 2
+X1 = 440                          # MSW / Lambda
+X2 = 730                          # Hono
+X1C, X2C = X1 + LOGO / 2, X2 + LOGO / 2
 SVC_X = 1240
-
-# ---------------------------------------------------------------- GitHub Pages
-pages = logo(d, "<b>GitHub Pages</b>  static files", X_REACT + 8, 24, "github", size=56, label_at="right")
+TOP = [210, 300, 390]             # emulator rows
+BOT = [790, 860, 930, 1000]       # AWS rows
+AY1 = TOP[1]
+AY2 = (BOT[0] + BOT[-1]) / 2
+REACT_Y = (AY1 + AY2) / 2
 
 # ---------------------------------------------------------------- the browser tab
-frame(d, "Browser tab", 40, 130, 1420, 410, FRAME, "#F8FAFC")
-AY = 350
-react = logo(d, "<b>React</b><br>the page", X_REACT, AY - LOGO / 2, "react", label_at="left")
-msw = logo(d, "<b>MSW</b><br>Service Worker", 500, AY - LOGO / 2, "mockserviceworker")
-hono = logo(d, "<b>Hono API</b><br>+ AWS SDK v3", 760, AY - LOGO / 2, "hono")
+tab = frame(d, "Browser tab", 40, 110, 1420, 560, FRAME, "#F8FAFC", icon="browser")
+pages = logo(d, "<b>GitHub Pages</b>  static files", X1 + 10, 12, "github", size=52, label_at="right")
+react = logo(d, "<b>React</b><br>the page", X_REACT, REACT_Y - LOGO / 2, "react", label_at="right")
+msw = logo(d, "<b>MSW</b><br>Service Worker", X1, AY1 - LOGO / 2, "mockserviceworker")
+hono = logo(d, "<b>Hono API</b><br>+ AWS SDK v3", X2, AY1 - LOGO / 2, "hono")
 
-frame(d, "Web Worker", 980, 160, 460, 356, "#7C3AED", "#F5F3FF")
-EMU = [AY - 92, AY, AY + 92]
-wasm = d.vertex("<b>AWS Emulator</b><br>Rust → wasm", 1010, EMU[0] - 40, 170, EMU[2] - EMU[0] + 80,
+frame(d, "Web Worker", 920, 140, 520, 320, "#7C3AED", "#F5F3FF")
+wasm = d.vertex("<b>AWS Emulator</b><br>Rust → wasm", 950, TOP[0] - 30, 170, TOP[-1] - TOP[0] + 60,
                 f"shape=label;{R}html=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#654FF0;strokeWidth=2;"
                 f"fontSize={LABEL_FONT};fontColor={INK};{FONT}image={img('webassembly')};imageWidth=64;imageHeight=64;"
-                f"imageAlign=center;imageVerticalAlign=top;spacingTop=96;verticalAlign=top;align=center;")
+                f"imageAlign=center;imageVerticalAlign=top;spacingTop=88;verticalAlign=top;align=center;")
 emu = [
-    aws(d, "<b>DynamoDB</b>", SVC_X, EMU[0] - ICON / 2, "dynamodb", C.DATABASE),
-    aws(d, "<b>S3</b>", SVC_X, EMU[1] - ICON / 2, "s3", C.STORAGE),
-    aws(d, "<b>SQS</b>", SVC_X, EMU[2] - ICON / 2, "sqs", C.MGMT),
+    aws(d, "<b>DynamoDB</b>", SVC_X, TOP[0] - ICON / 2, "dynamodb", C.DATABASE),
+    aws(d, "<b>S3</b>", SVC_X, TOP[1] - ICON / 2, "s3", C.STORAGE),
+    aws(d, "<b>SQS</b>", SVC_X, TOP[2] - ICON / 2, "sqs", C.MGMT),
 ]
 
 # ---------------------------------------------------------------- AWS
-frame(d, "AWS Cloud", 40, 620, 1420, 370, INK, "#FFFFFF")
-AWS = [710, 785, 860, 935]
-fn = d.vertex("", 120, AWS[0] - 44, 760, AWS[3] - AWS[0] + 88,
-              f"{R}html=1;whiteSpace=wrap;fillColor=#FFF7ED;strokeColor={C.COMPUTE};strokeWidth=2;")
-# Inside the function: the Lambda icon under the incoming line, and the same Hono logo as above.
-lam = aws(d, "<b>Lambda Web Function</b><br>Node.js 24", REACT_CX - ICON / 2, (AWS[0] + AWS[3]) / 2 - ICON / 2, "lambda", C.COMPUTE)
-same = logo(d, "<b>the same Hono API</b><br>+ AWS SDK v3", 760, (AWS[0] + AWS[3]) / 2 - LOGO / 2 - 18, "hono")
+frame(d, "AWS Cloud", 40, 720, 1420, 370, INK, "#FFFFFF", icon="aws")
+frame(d, "Lambda Web Function", 380, 750, 500, 310, C.COMPUTE, "#FFF7ED", dashed=True)
+lam = aws(d, "<b>Lambda</b><br>Node.js 24", X1C - ICON / 2, AY2 - ICON / 2, "lambda", C.COMPUTE, label_at="bottom")
+api = d.vertex("<b>the same Hono API</b><br>+ AWS SDK v3", X2C - 85, BOT[0] - 30, 170, BOT[-1] - BOT[0] + 60,
+               f"shape=label;{R}html=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor={C.COMPUTE};strokeWidth=2;"
+               f"fontSize={LABEL_FONT};fontColor={INK};{FONT}image={img('hono')};imageWidth=64;imageHeight=64;"
+               f"imageAlign=center;imageVerticalAlign=top;spacingTop=88;verticalAlign=top;align=center;")
 cloud = [
-    aws(d, "<b>DynamoDB</b>", SVC_X, AWS[0] - ICON / 2, "dynamodb", C.DATABASE),
-    aws(d, "<b>S3</b>", SVC_X, AWS[1] - ICON / 2, "s3", C.STORAGE),
-    aws(d, "<b>SQS</b>", SVC_X, AWS[2] - ICON / 2, "sqs", C.MGMT),
-    aws(d, "<b>Cognito</b>", SVC_X, AWS[3] - ICON / 2, "cognito", C.SECURITY),
+    aws(d, "<b>DynamoDB</b>", SVC_X, BOT[0] - ICON / 2, "dynamodb", C.DATABASE),
+    aws(d, "<b>S3</b>", SVC_X, BOT[1] - ICON / 2, "s3", C.STORAGE),
+    aws(d, "<b>SQS</b>", SVC_X, BOT[2] - ICON / 2, "sqs", C.MGMT),
+    aws(d, "<b>Cognito</b>", SVC_X, BOT[3] - ICON / 2, "cognito", C.SECURITY),
 ]
 
 # ---------------------------------------------------------------- lines
-edge(d, pages, react, color=FRAME, out="B", into="T", dashed=True)
+edge(d, pages, tab, color=FRAME, out="B", into="T", into_at=d.frac_x(tab, X1 + 36), dashed=True)
 
-edge(d, react, msw, "<b>VITE_API_URL unset</b><br>fetch('/api/todos')", label_pos=-0.05)
-edge(d, msw, hono)
-edge(d, hono, wasm, "postMessage", into_at=d.frac_y(wasm, AY))
-for svc, y in zip(emu, EMU):
+# The switch: up to the in-browser path, down to AWS (one bend each).
+edge(d, react, msw, "<b>VITE_API_URL unset</b>", out="T", into="L")
+edge(d, msw, hono, "fetch('/api/todos')")
+edge(d, hono, wasm, "postMessage", into_at=d.frac_y(wasm, AY1), label_pos=-0.35)
+for svc, y in zip(emu, TOP):
     edge(d, wasm, svc, color=INK, at=d.frac_y(wasm, y))
 
-edge(d, react, fn, "<b>VITE_API_URL set</b><br>HTTPS + Cognito token", out="B", into="T",
-     into_at=d.frac_x(fn, REACT_CX), label_pos=-0.2)
-for svc, y in zip(cloud[:3], AWS[:3]):
-    edge(d, fn, svc, color=INK, at=d.frac_y(fn, y))
-edge(d, fn, cloud[3], "verify token", color=C.SECURITY, dashed=True, at=d.frac_y(fn, AWS[3]))
+edge(d, react, lam, "<b>VITE_API_URL set</b><br>HTTPS + Cognito token", out="B", into="L")
+edge(d, lam, api, "runs", into_at=d.frac_y(api, AY2))
+for svc, y in zip(cloud[:3], BOT[:3]):
+    edge(d, api, svc, color=INK, at=d.frac_y(api, y))
+edge(d, api, cloud[3], "verify token", color=C.SECURITY, dashed=True, at=d.frac_y(api, BOT[3]))
 
 d.write(ROOT / "docs/architecture/how-it-works.drawio")
