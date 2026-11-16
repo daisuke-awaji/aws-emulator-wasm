@@ -44,3 +44,9 @@
 ## 2026-11-16 Todo の下の SDK の表示を取りやめ
 - ユーザーの判断で、Todo の直下（と入力欄の下）に出していた SDK の実行は外した。「SDK の呼び出し」欄の行を開くと入力と出力が見られる部分と、操作名に Todo の題名を付ける部分は残した。
 - e2e は欄の行を開いて入力・出力を確かめるテストに置き換え、Todo の下に何も出ないことも確かめる。Playwright 20 件 pass。
+
+## 2026-11-16 永続化の検討
+- docs/persistence-design.md。方式は「wasm のメモリをまるごと保存して書き戻す」を推す。上流のエンジンには書き出しの機能がなく、状態の型に serde もないため。
+- Node の実験（js/experiments/）：書き戻した新しいインスタンスで、DynamoDB・S3・SQS の中身が残る。別のプロセスでも読める。メモリは 19 MiB（gzip 2.8 MiB、84 ms）。mutable な global は `__stack_pointer` だけ。
+- 単調時計を引き継がないと、保存した時刻が未来になって壊れる（Scan が ResourceNotFound）。単調時計を UNIX 時刻基準にし、`skippedNs` を引き継ぐと直る。
+- 決めること：方式、複数タブ（Web Locks で 1 タブだけ）、wasm が変わったときの扱い、保存の契機。
