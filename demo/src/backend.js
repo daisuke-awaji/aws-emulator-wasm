@@ -2,10 +2,10 @@
 // SDK. Todos live in DynamoDB, notes in S3, and every change is published to SQS.
 import { ConditionalCheckFailedException, CreateTableCommand, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, NoSuchKey, PutObjectCommand } from '@aws-sdk/client-s3';
-import { CreateQueueCommand, DeleteMessageBatchCommand, ReceiveMessageCommand, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { CreateQueueCommand, DeleteMessageBatchCommand, GetQueueUrlCommand, ReceiveMessageCommand, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { DeleteCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { inSetup } from './calls.js';
-import { ddb, docs, s3, sqs } from './emulator.js';
+import { ddb, docs, emulator, s3, sqs } from './emulator.js';
 
 export const TABLE = 'todos';
 export const BUCKET = 'todo-notes';
@@ -23,6 +23,12 @@ export class HttpError extends Error {
 let queueUrl;
 
 async function setup() {
+  const { persistence } = await emulator.ready;
+  if (persistence?.restored) {
+    // The table, bucket, queue and Todos came back with the emulator's saved memory.
+    ({ QueueUrl: queueUrl } = await sqs.send(new GetQueueUrlCommand({ QueueName: QUEUE })));
+    return;
+  }
   await ddb.send(new CreateTableCommand({
     TableName: TABLE,
     BillingMode: 'PAY_PER_REQUEST',
@@ -47,7 +53,10 @@ async function setup() {
 }
 
 let ready;
-/** Creates the table, bucket and queue once (the emulator starts empty on every load). */
+/**
+ * Once per page: creates the table, bucket, queue and seed Todos, or, when the emulator
+ * restored its saved state, just looks the queue up again.
+ */
 export const ensureSetup = () => (ready ??= inSetup(setup));
 
 async function publish(type, todo) {

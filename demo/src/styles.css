@@ -314,3 +314,14 @@ textarea { resize: vertical; line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Saved state ------------------------------------------------------------- */
+.status-waiting .dot { background: var(--warning); }
+.boot h2 { margin-bottom: 4px; }
+.hero + .boot { margin-bottom: 28px; }
+.boot .btn { margin-top: 8px; }
+.notice { grid-column: 1 / -1; margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 13.5px; word-break: auto-phrase; text-wrap: pretty; }
+.save-state { display: grid; gap: 8px; justify-items: start; padding: 12px 16px 14px; border-top: 1px solid var(--border); }
+.save-line { margin: 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.confirm { display: grid; gap: 8px; }
+.confirm p { margin: 0; font-size: 13px; }

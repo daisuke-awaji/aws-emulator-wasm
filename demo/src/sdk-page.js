@@ -19,7 +19,7 @@ function addRow(service, label, value, cls = '') {
 
 const result = { ok: false, timings: {}, readyMs: undefined, error: undefined };
 try {
-  result.readyMs = await readyIn;
+  result.readyMs = (await readyIn).ms;
   addRow('—', 'wasm の取得とコンパイル', `${emulator.stats.fetchCompileMs.toFixed(0)} ms`);
   addRow('—', 'インスタンス化', `${emulator.stats.instantiateMs.toFixed(0)} ms`);
   for (const [name, run] of Object.entries(scenarios)) {

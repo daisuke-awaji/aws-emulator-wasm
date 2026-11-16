@@ -42,7 +42,7 @@
 | SQS DeleteMessageBatch | `GET /api/activity` | 受け取った記録を消す |
 | SQS ReceiveMessage | `GET /api/activity` | キューが空であることを確かめる |
 
-起動時の準備（テーブル・バケット・キューの作成、初期データ 3 件、最初の読み込み）は 13 回です。累計の欄はこの 13 回を含みます。
+起動時の準備（テーブル・バケット・キューの作成、初期データ 3 件、最初の読み込み）は 13 回です。累計の欄はこの 13 回を含みます。保存した状態を復元したときは、キューの URL を引き直す GetQueueUrl と最初の読み込みで 3 回です。
 
 ## 使い方（ブラウザ）
 
@@ -56,10 +56,31 @@ const ddb = new DynamoDBClient(emulator.clientConfig());
 const s3 = new S3Client(emulator.clientConfig({ forcePathStyle: true }));
 ```
 
-- 状態はメモリの中だけにあり、ページを閉じると消えます。
+- 既定では、状態はメモリの中だけにあり、ページを閉じると消えます。
+- `persist: { name }` を渡すと、再読み込みしても状態が残ります（下の「状態の保存」）。
 - `createEmulator({ onCall })` を渡すと、エミュレーターが応答するたびに `{ seq, method, url, headers, status, ms }` で呼ばれます。デモはこれで「SDK の呼び出し」欄を作っています（`demo/src/calls.js`）。
 - 時計は「仮想時計」が既定です。エミュレーターが待つ場面（作成直後の DynamoDB テーブルなど）では待たずに時計を進めます。詳しくは [Phase 1 レポート](./docs/phase1-report.md#2-設計で決めたこと)を参照してください。
 - 載っているサービス：DynamoDB、S3、SQS と、それらが依存するサービス（計 13）。
+
+### 状態の保存
+
+```js
+const emulator = createEmulator({
+  wasmUrl: '/aws-emulator.wasm',
+  persist: { name: 'my-app' },
+  onLock: (state) => {}, // 'waiting' | 'held' | 'lost'
+});
+const { persistence } = await emulator.ready; // { enabled, restored, savedAt?, discarded? }
+```
+
+- **保存のしかた**：要求が 100 ms 途切れたら、Worker が wasm のメモリをまるごと gzip にして、OPFS（`aws-emulator-wasm/<name>/`）に保存します。いまの大きさは 2.5 MB ほどで、1 回に 250 ms ほどかかります。要求を止めるのは、メモリを写す数 ms だけです。
+- **読み込み**：次に開いたとき、`ready` の前に新しいインスタンスへ書き戻します。DynamoDB・S3・SQS の中身も、メッセージが見えなくなっている時間も、そのまま続きます。
+- **wasm が新しい版のとき**：保存した wasm の SHA-256 が今の wasm と違えば、保存データは使わずに捨てます（`discarded: 'version'`）。ほかのビルドのメモリは読めないためです。
+- **途中で閉じたとき**：保存先は 2 つの枠で、交互に書きます。書いている途中でタブを閉じても、1 つ前の状態が残ります（`discarded: 'corrupt'` で知らせます）。
+- **複数のタブ**：同じ `name` で動かせるのは 1 つのタブだけです（Web Locks）。2 つ目のタブは `onLock('waiting')` で待ち、`takeOver()` で引き継げます。引き継がれた側は `onLock('lost')` になり、止まります。
+- **そのほかの操作**：`flush()` は、そこまでの応答を保存し終えたら resolve します。`reset()` は、エミュレーターを止めて保存データを消します（そのあと、ページを読み込み直してください）。
+- **保存されない場合**：保存が終わる前にタブを閉じると、最後の操作は残りません。また、ブラウザが保存データを消すことがあります（容量が足りないとき。Safari は 7 日間操作のないサイトのデータを消します）。
+- **決めた経緯**：方式の比較と実験は [docs/persistence-design.md](./docs/persistence-design.md) にまとめました。
 
 ## ドキュメント
 
@@ -67,6 +88,7 @@ const s3 = new S3Client(emulator.clientConfig({ forcePathStyle: true }));
 - [docs/phase0-report.md](./docs/phase0-report.md)：Phase 0（wasm 向けビルド検証）の結果
 - [docs/phase05-report.md](./docs/phase05-report.md)：Phase 0.5（wasm のビルドと Node での往復）の結果
 - [docs/phase1-report.md](./docs/phase1-report.md)：Phase 1（ブラウザ、Todo デモ、Pages 公開）の結果
+- [docs/persistence-design.md](./docs/persistence-design.md)：状態の保存（メモリのスナップショット）の検討と実験
 - [PROGRESS.md](./PROGRESS.md)：進捗の記録
 
 ## 上流

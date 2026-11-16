@@ -1,7 +1,8 @@
-import { ArrowUpRight, Boxes, Check, CornerDownLeft, FileText, Pencil, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, Boxes, Check, CornerDownLeft, FileText, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Architecture } from './Architecture.jsx';
 import { CallLog } from './CallLog.jsx';
+import { emulator, live, reloadAndTakeOver, resetAndReload } from './emulator.js';
 
 const REPO = 'https://github.com/daisuke-awaji/aws-emulator-wasm';
 
@@ -14,7 +15,7 @@ const EVENT_LABELS = {
   deleted: '削除',
 };
 
-const BOOT_STATUS = { loading: '読み込み中', ready: '動作中', failed: '停止' };
+const BOOT_STATUS = { loading: '読み込み中', waiting: '待機中', ready: '動作中', failed: '停止' };
 
 /** Calls the mocked REST API (relative to the page, so it works under any base path). */
 async function call(path, { method = 'GET', json, text } = {}) {
@@ -46,6 +47,17 @@ function useElapsed(running) {
   return seconds;
 }
 
+/** Re-renders when the emulator's lock or save state changes (see emulator.js). */
+function useLive() {
+  const [, setVersion] = useState(0);
+  useEffect(() => live.subscribe(() => setVersion((v) => v + 1)), []);
+  return live;
+}
+
+const timeOf = (iso) => new Date(iso).toLocaleTimeString('ja-JP');
+const dateTimeOf = (iso) =>
+  new Date(iso).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
 function GitHubMark() {
   // Octicons mark-github (MIT).
   return (
@@ -57,14 +69,18 @@ function GitHubMark() {
 
 export function App({ mocking, readyIn }) {
   const [boot, setBoot] = useState({ state: 'loading' });
-  const elapsed = useElapsed(boot.state === 'loading');
+  const { lock } = useLive();
+  const elapsed = useElapsed(boot.state === 'loading' && lock !== 'waiting');
 
   useEffect(() => {
     Promise.all([mocking, readyIn]).then(
-      ([, ms]) => setBoot({ state: 'ready', ms }),
+      ([, { ms, persistence }]) => setBoot({ state: 'ready', ms, persistence }),
       (error) => setBoot({ state: 'failed', message: String(error?.message ?? error) }),
     );
   }, [mocking, readyIn]);
+
+  // Another tab took the emulator over: this one is stopped, whatever it was doing.
+  const state = lock === 'lost' ? 'failed' : lock === 'waiting' && boot.state === 'loading' ? 'waiting' : boot.state;
 
   return (
     <>
@@ -81,9 +97,9 @@ export function App({ mocking, readyIn }) {
             <span className="brand-page">todo</span>
           </a>
           <div className="nav-right">
-            <span className={`pill status-${boot.state}`}>
+            <span className={`pill status-${state}`}>
               <span className="dot" aria-hidden="true" />
-              {BOOT_STATUS[boot.state]}
+              {BOOT_STATUS[state]}
             </span>
             <a className="nav-link" href="sdk.html">
               SDK テスト
@@ -108,9 +124,38 @@ export function App({ mocking, readyIn }) {
           </p>
         </header>
 
-        <Architecture state={boot.state} />
+        {/* Cards that need an action come before the diagram, so a phone shows them at once. */}
+        {state === 'waiting' && (
+          <section className="card boot" role="status" aria-labelledby="waiting-title">
+            <div>
+              <h2 id="waiting-title">このデモは別のタブで開いています</h2>
+              <p className="muted">
+                エミュレーターの状態をこのブラウザに保存しているので、同時に動かせるのは 1 つのタブだけです。そのタブを閉じると、ここで始まります。
+              </p>
+              <p>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => emulator.takeOver()}>
+                  このタブで使う
+                </button>
+              </p>
+            </div>
+          </section>
+        )}
+        {lock === 'lost' && (
+          <section className="card boot" role="alert" aria-labelledby="lost-title">
+            <div>
+              <h2 id="lost-title">別のタブで使い始めたので、このタブは止めました</h2>
+              <p className="muted">同時に動かせるのは 1 つのタブだけです。ここに戻すと、もう一方のタブが止まります。</p>
+              <p>
+                <button type="button" className="btn btn-primary btn-sm" onClick={reloadAndTakeOver}>
+                  このタブで使う
+                </button>
+              </p>
+            </div>
+          </section>
+        )}
+        <Architecture state={state === 'waiting' ? 'loading' : state} />
 
-        {boot.state === 'loading' && (
+        {state === 'loading' && (
           <section className="card boot" role="status" aria-live="polite">
             <div className="spinner" aria-hidden="true" />
             <div>
@@ -121,16 +166,18 @@ export function App({ mocking, readyIn }) {
             </div>
           </section>
         )}
-        {boot.state === 'failed' && (
+        {state === 'failed' && lock !== 'lost' && (
           <section className="card error-box" role="alert">
             <h2>エミュレーターを起動できませんでした</h2>
             <pre>{boot.message}</pre>
           </section>
         )}
-        {boot.state === 'ready' && <Todos bootMs={boot.ms} />}
+        {state === 'ready' && <Todos bootMs={boot.ms} persistence={boot.persistence} />}
 
         <footer className="footer">
-          <p>状態はページを再読み込みすると消えます（保存は今後の Phase で対応します）。</p>
+          <p>
+            状態はこのブラウザの中（OPFS）に保存され、再読み込みしても残ります。サーバーには送りません。「初期状態に戻す」で最初の 3 件に戻ります。
+          </p>
           <p className="footer-links">
             <a href="sdk.html">SDK の往復テスト（DynamoDB・S3・SQS）</a>
             <a href={REPO}>
@@ -144,7 +191,7 @@ export function App({ mocking, readyIn }) {
   );
 }
 
-function Todos({ bootMs }) {
+function Todos({ bootMs, persistence }) {
   const [todos, setTodos] = useState(null);
   const [error, setError] = useState('');
   const [activity, setActivity] = useState([]);
@@ -188,8 +235,8 @@ function Todos({ bootMs }) {
   }, []);
 
   useEffect(() => {
-    run('起動（テーブル・バケット・キューの作成と初期データ）', async () => {});
-  }, [run]);
+    run(persistence?.restored ? '起動（保存した状態を復元）' : '起動（テーブル・バケット・キューの作成と初期データ）', async () => {});
+  }, [run, persistence]);
 
   const add = async (event) => {
     event.preventDefault();
@@ -205,6 +252,7 @@ function Todos({ bootMs }) {
 
   return (
     <div className="workspace">
+      <PersistNotice persistence={persistence} />
       <main className="card todos-card" aria-labelledby="todos-title">
         <div className="card-head">
           <h2 id="todos-title">Todos</h2>
@@ -292,6 +340,7 @@ function Todos({ bootMs }) {
                 </dd>
               </div>
             </dl>
+            {persistence && <SaveState persistence={persistence} busy={busy} />}
           </section>
         )}
 
@@ -317,6 +366,69 @@ function Todos({ bootMs }) {
       </aside>
 
       <CallLog groups={groups} />
+    </div>
+  );
+}
+
+/** What happened to the saved state when the page loaded. */
+function PersistNotice({ persistence }) {
+  if (!persistence) return null;
+  let text;
+  if (!persistence.enabled) text = 'このブラウザでは保存を使えないため、再読み込みすると初期状態に戻ります。';
+  else if (persistence.restored && persistence.discarded === 'corrupt')
+    text = `最後の保存が壊れていたため、1 つ前の状態（${dateTimeOf(persistence.savedAt)} に保存）を復元しました。`;
+  else if (persistence.restored) text = `前回の状態を復元しました（${dateTimeOf(persistence.savedAt)} に保存）。`;
+  else if (persistence.discarded === 'version') text = 'エミュレーターが新しい版になったので、初期状態から始めました。';
+  else if (persistence.discarded === 'corrupt') text = '保存したデータが壊れていたため、初期状態から始めました。';
+  if (!text) return null;
+  return (
+    <p className="notice" role="status" data-testid="persist-notice">
+      {text}
+    </p>
+  );
+}
+
+/** The last save, and the way back to the seed data. */
+function SaveState({ persistence, busy }) {
+  const { lastSave, saveError } = useLive();
+  const [confirming, setConfirming] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const reset = async () => {
+    setResetting(true);
+    await resetAndReload();
+  };
+  return (
+    <div className="save-state">
+      <p className="save-line" data-testid="last-save" data-requests={lastSave?.requests ?? 0} aria-live="polite">
+        {!persistence.enabled
+          ? '保存：使えません'
+          : saveError
+            ? `保存に失敗しました：${saveError}`
+            : lastSave
+              ? `保存：${timeOf(lastSave.at)}（${(lastSave.bytes / 1024 / 1024).toFixed(1)} MB、${Math.round(lastSave.ms)} ms）`
+              : persistence.restored
+                ? `保存：${timeOf(persistence.savedAt)}（復元した状態）`
+                : '保存：まだありません'}
+      </p>
+      {persistence.enabled &&
+        (confirming ? (
+          <div className="confirm" role="group" aria-label="初期状態に戻す">
+            <p>保存したデータを消して、最初の 3 件に戻します。</p>
+            <div className="note-actions">
+              <button type="button" className="btn btn-primary btn-sm" onClick={reset} disabled={resetting}>
+                消して戻す
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(false)} disabled={resetting}>
+                やめる
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => setConfirming(true)} disabled={busy}>
+            <RotateCcw size={14} aria-hidden="true" />
+            初期状態に戻す
+          </button>
+        ))}
     </div>
   );
 }

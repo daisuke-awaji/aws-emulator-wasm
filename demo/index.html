@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="サーバーなしで動く Todo。MSW のハンドラから、ブラウザ内の AWS Emulator（wasm）の DynamoDB・S3・SQS を呼びます。" />
+    <!-- Keep the emulator's state across reloads (OPFS), under this name. -->
+    <meta name="aws-emulator-persist" content="todo-demo" />
     <title>Todo — AWS Emulator in the browser</title>
   </head>
   <body>

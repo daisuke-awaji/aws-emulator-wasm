@@ -25,6 +25,7 @@
     "./handler": "./src/handler.mjs",
     "./wasi": "./src/wasi.mjs",
     "./codec": "./src/codec.mjs",
-    "./scenarios": "./test/scenarios.mjs"
+    "./scenarios": "./test/scenarios.mjs",
+    "./snapshot-format": "./src/snapshot-format.mjs"
   }
 }

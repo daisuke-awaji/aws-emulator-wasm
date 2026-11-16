@@ -50,3 +50,16 @@
 - Node の実験（js/experiments/）：書き戻した新しいインスタンスで、DynamoDB・S3・SQS の中身が残る。別のプロセスでも読める。メモリは 19 MiB（gzip 2.8 MiB、84 ms）。mutable な global は `__stack_pointer` だけ。
 - 単調時計を引き継がないと、保存した時刻が未来になって壊れる（Scan が ResourceNotFound）。単調時計を UNIX 時刻基準にし、`skippedNs` を引き継ぐと直る。
 - 決めること：方式、複数タブ（Web Locks で 1 タブだけ）、wasm が変わったときの扱い、保存の契機。
+
+## 2026-11-16 永続化の実装（メモリのスナップショット）
+- 決定：方式は A（wasm のメモリをまるごと保存）。複数タブは 1 タブだけ（Web Locks）。wasm が変われば捨てる。保存は要求が途切れたら。
+- js：
+  - シムの単調時計を UNIX 時刻基準にし、`resume` で引き継げるようにした。
+  - `snapshot()` と `restore()` を追加した。保存の形式は snapshot-format.mjs（wasm の SHA-256 と本体の SHA-256 を持つ）。
+  - OPFS の 2 枠は store.mjs。Worker は要求が 100 ms 途切れたら保存する。
+  - `createEmulator({ persist })` に `onLock`・`onSave`・`flush`・`reset`・`takeOver` を足した。
+- demo：
+  - Todo のページだけ保存する。復元したときの起動は 3 回（GetQueueUrl、Scan、ReceiveMessage）。
+  - 復元の表示、最後の保存、「初期状態に戻す」、別のタブで開いているときの表示（図より上に出す）を足した。
+- テスト：Node 24 件 pass。Playwright 30 件 pass（新規の 5 テストは 3 回繰り返しても安定）。
+- ブラウザでの 1 回の保存：2.5 MB、250〜290 ms。

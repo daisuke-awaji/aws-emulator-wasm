@@ -10,6 +10,9 @@
 //   and the emulator sleeps on purpose in places (DescribeTable waits out a 3-second
 //   CREATING span). "real" mode blocks instead: with Atomics.wait where it is available
 //   (Node), otherwise by spinning.
+// - The monotonic clock counts from the UNIX epoch, not from page load, and never goes
+//   back. A restored snapshot of the emulator's memory holds Instants from the earlier
+//   page; with `options.resume` the clock carries on from where that page stopped.
 
 const ERRNO_SUCCESS = 0;
 const ERRNO_BADF = 8;
@@ -63,7 +66,9 @@ function blockFor(ns) {
  *   env?: Record<string, string>,
  *   clock?: 'virtual' | 'real',
  *   log?: (stream: 'stdout' | 'stderr', line: string) => void,
+ *   resume?: { skippedNs: bigint, monotonicNs: bigint },
  * }} [options]
+ *   resume: the `clockState` of the instance whose memory is being restored.
  */
 export function createWasi(options = {}) {
   const clockMode = options.clock ?? 'virtual';
@@ -75,7 +80,18 @@ export function createWasi(options = {}) {
   /** @type {WebAssembly.Memory | undefined} */
   let memory;
   // Nanoseconds the clocks have been moved forward by virtual sleeps.
-  let skippedNs = 0n;
+  let skippedNs = options.resume?.skippedNs ?? 0n;
+  const epochNs = () => msToNs(performance.timeOrigin + performance.now());
+  // Added to the monotonic clock if the system clock is now behind where the restored
+  // instance stopped (the clock was set back between the two pages).
+  const behindNs = options.resume ? options.resume.monotonicNs - (epochNs() + skippedNs) : 0n;
+  const monotonicOffsetNs = behindNs > 0n ? behindNs : 0n;
+  let lastMonotonicNs = options.resume?.monotonicNs ?? 0n;
+  const monotonic = () => {
+    const t = epochNs() + skippedNs + monotonicOffsetNs;
+    if (t > lastMonotonicNs) lastMonotonicNs = t;
+    return lastMonotonicNs;
+  };
 
   const view = () => new DataView(memory.buffer);
   const bytes = () => new Uint8Array(memory.buffer);
@@ -83,11 +99,11 @@ export function createWasi(options = {}) {
   const now = (id) => {
     switch (id) {
       case CLOCK_REALTIME:
-        return msToNs(performance.timeOrigin + performance.now()) + skippedNs;
+        return epochNs() + skippedNs;
       case CLOCK_MONOTONIC:
       case CLOCK_PROCESS_CPUTIME:
       case CLOCK_THREAD_CPUTIME:
-        return msToNs(performance.now()) + skippedNs;
+        return monotonic();
       default:
         return undefined;
     }
@@ -256,6 +272,10 @@ export function createWasi(options = {}) {
     /** How far virtual sleeps have moved the clocks, in milliseconds. */
     get skippedMs() {
       return Number(skippedNs / NS_PER_MS);
+    },
+    /** What `options.resume` needs to carry the clocks over to a restored copy of this instance. */
+    get clockState() {
+      return { skippedNs, monotonicNs: monotonic() };
     },
   };
 }

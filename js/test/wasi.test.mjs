@@ -48,6 +48,31 @@ test('real clock: a sleep blocks', () => {
   assert.equal(wasi.skippedMs, 0);
 });
 
+test('monotonic clock: counts from the UNIX epoch and carries over with resume', () => {
+  const a = setup();
+  const epoch = BigInt(Math.floor(performance.timeOrigin + performance.now())) * 1_000_000n;
+  const t0 = clock(a.w, a.view, 1);
+  assert.ok(t0 - epoch >= 0n && t0 - epoch < 1_000_000_000n);
+  sleep(a.w, a.view, 3_000_000_000n);
+  const state = a.wasi.clockState;
+  assert.ok(state.skippedNs >= 2_999_000_000n);
+  // The next page: the clock goes on from the last reading, skipped time included.
+  const b = setup({ resume: state });
+  const t1 = clock(b.w, b.view, 1);
+  assert.ok(t1 >= state.monotonicNs);
+  assert.ok(t1 - state.monotonicNs < 1_000_000_000n);
+  assert.equal(b.wasi.skippedMs, a.wasi.skippedMs);
+});
+
+test('monotonic clock: does not go back when the system clock is behind the saved state', () => {
+  const ahead = { skippedNs: 0n, monotonicNs: BigInt(Math.floor(performance.timeOrigin + performance.now())) * 1_000_000n + 3_600_000_000_000n };
+  const { w, view } = setup({ resume: ahead });
+  const t1 = clock(w, view, 1);
+  assert.ok(t1 >= ahead.monotonicNs);
+  const t2 = clock(w, view, 1);
+  assert.ok(t2 >= t1);
+});
+
 test('random_get fills more than 64 KiB', () => {
   const { w, memory } = setup();
   assert.equal(w.random_get(0, 65536 * 2), 0);
