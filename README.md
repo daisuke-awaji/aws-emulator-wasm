@@ -100,19 +100,17 @@ Node has its own loader: `aws-emulator-wasm/node`.
 ## How it works
 
 ```mermaid
-flowchart TB
-  P["GitHub Pages<br/>static files only"] -- "one download: HTML, JS, wasm" --> tab
-  subgraph tab["Browser tab"]
-    direction LR
-    UI["React<br/>fetch('/api/todos')"] --> SW["MSW<br/>Service Worker"]
-    SW --> H["Handlers<br/>AWS SDK v3"]
-    H -- "postMessage" --> E
-    subgraph W["Web Worker"]
-      E["aws-emulator.wasm<br/>DynamoDB · S3 · SQS"]
-    end
-    E -. "snapshots" .-> O[("OPFS")]
+flowchart LR
+  UI["React<br/>fetch('/api/todos')"] --> SW["MSW<br/>Service Worker"]
+  SW --> H["Handlers<br/>AWS SDK v3"]
+  H -- "postMessage" --> E
+  subgraph W["Web Worker"]
+    E["aws-emulator.wasm<br/>DynamoDB · S3 · SQS"]
   end
+  E -. "snapshots" .-> O[("OPFS")]
 ```
+
+Everything above runs in one browser tab, served as static files from GitHub Pages.
 
 1. The app calls its own API with `fetch`. MSW catches the request in the page.
 2. The handler runs ordinary SDK code: `docs.send(new PutCommand(...))`.
