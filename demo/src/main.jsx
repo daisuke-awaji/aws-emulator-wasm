@@ -1,3 +1,4 @@
+import './stale-build.js';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.jsx';
 import { setDocumentKeys } from './i18n.js';
