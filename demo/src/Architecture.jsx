@@ -1,8 +1,10 @@
-import { Atom, Braces, CloudOff, Cpu, Globe, Radar } from 'lucide-react';
+import { Atom, Braces, CloudOff, Globe, Radar } from 'lucide-react';
 // AWS Architecture Icons (https://aws.amazon.com/architecture/icons/, package 07312026, 48 px).
 import dynamodbIcon from './assets/aws/dynamodb.svg';
 import s3Icon from './assets/aws/s3.svg';
 import sqsIcon from './assets/aws/sqs.svg';
+// Simple Icons (CC0): the emulator is Rust compiled to WebAssembly.
+import wasmLogo from './assets/logos/webassembly.svg';
 import { t } from './i18n.js';
 
 // role and where are message keys, except where a name needs no translation.
@@ -49,7 +51,7 @@ export function Architecture({ state }) {
         <li className={`arch-emulator is-${state}`}>
           <div className="arch-emulator-head">
             <span className="arch-icon">
-              <Cpu size={20} aria-hidden="true" />
+              <img src={wasmLogo} alt="WebAssembly" width="22" height="22" />
             </span>
             <span className="arch-text">
               <strong>{t('arch.emulator')}</strong>
