@@ -1,6 +1,7 @@
 // Round-trips AWS SDK v3 calls through the wasm emulator in Node, once with node:wasi
 // (real clocks) and once with the WASI shim the browser uses (virtual clock).
-// Needs EMULATOR_WASM=<path to the .wasm>; skipped without it.
+// Needs EMULATOR_WASM=<path to the .wasm>; skipped without it. CI runs it against both the
+// cargo build and the wasm-opt build (their WASI imports differ).
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';

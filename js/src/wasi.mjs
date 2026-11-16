@@ -1,4 +1,5 @@
-// A small WASI preview1 implementation: just the 15 imports the emulator build uses.
+// A small WASI preview1 implementation: the imports the emulator build uses (16 before
+// wasm-opt, 15 after). Any other preview1 function answers ENOSYS instead of failing to link.
 // It has no Node or DOM dependencies, so the same code runs in a browser Worker and in Node.
 //
 // - No files: there are no preopened directories, so every file open fails.
@@ -13,6 +14,8 @@
 const ERRNO_SUCCESS = 0;
 const ERRNO_BADF = 8;
 const ERRNO_INVAL = 28;
+const ERRNO_NOSYS = 52;
+const ERRNO_SPIPE = 70;
 const ERRNO_NOTCAPABLE = 76;
 
 const CLOCK_REALTIME = 0;
@@ -160,6 +163,7 @@ export function createWasi(options = {}) {
       return ERRNO_SUCCESS;
     },
     fd_close: (fd) => (fd <= 2 ? ERRNO_SUCCESS : ERRNO_BADF),
+    fd_seek: (fd) => (fd <= 2 ? ERRNO_SPIPE : ERRNO_BADF),
     fd_fdstat_get(fd, statPtr) {
       if (fd > 2) return ERRNO_BADF;
       const v = view();
@@ -233,8 +237,17 @@ export function createWasi(options = {}) {
     },
   };
 
+  const nosys = new Map();
+  const preview1 = new Proxy(imports, {
+    get(target, name) {
+      if (name in target || typeof name !== 'string') return target[name];
+      if (!nosys.has(name)) nosys.set(name, () => ERRNO_NOSYS);
+      return nosys.get(name);
+    },
+  });
+
   return {
-    imports: { wasi_snapshot_preview1: imports },
+    imports: { wasi_snapshot_preview1: preview1 },
     /** Points the imports at the instance's memory and runs its initializer. */
     initialize(instance) {
       memory = instance.exports.memory;

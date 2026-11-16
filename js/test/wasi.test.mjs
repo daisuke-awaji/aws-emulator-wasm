@@ -77,3 +77,11 @@ test('proc_exit throws WasiExit', () => {
   const { w } = setup();
   assert.throws(() => w.proc_exit(3), (e) => e instanceof WasiExit && e.code === 3);
 });
+
+test('functions the shim does not implement answer ENOSYS', () => {
+  const { w } = setup();
+  assert.equal(w.fd_seek(1, 0n, 0, 0), 70);
+  assert.equal(w.fd_seek(9, 0n, 0, 0), 8);
+  assert.equal(w.sock_accept(3, 0, 0), 52);
+  assert.equal(typeof w.path_unlink_file, 'function');
+});
