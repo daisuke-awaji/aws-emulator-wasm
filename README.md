@@ -1,114 +1,185 @@
+<div align="center">
+
 # aws-emulator-wasm
 
-[AWS Emulator](https://github.com/aws/aws-emulator) をブラウザの中で動かす試みです。React アプリのモック API（MSW）の接続先にして、**GitHub Pages などの静的配信だけで完結するモックアプリ**を作れるようにすることが目標です。
+**AWS in a browser tab.**
 
-> 状態：**Phase 1 完了**。ブラウザの Web Worker の中でエミュレーター（wasm）が動き、AWS SDK v3 から DynamoDB・S3・SQS を呼べます。MSW から使う Todo デモを公開しています（[Phase 1 レポート](./docs/phase1-report.md)）。
->
-> - デモ：<https://daisuke-awaji.github.io/aws-emulator-wasm/>
-> - SDK の往復テスト：<https://daisuke-awaji.github.io/aws-emulator-wasm/sdk.html>
+[AWS Emulator](https://github.com/aws/aws-emulator) compiled to WebAssembly and run in a Web Worker.<br>
+Point AWS SDK v3 at it and get DynamoDB, S3 and SQS with no server, no Docker and no AWS account.
 
-![Todo デモ](./docs/img/pages-desktop.png)
+[![CI](https://github.com/daisuke-awaji/aws-emulator-wasm/actions/workflows/wasm.yml/badge.svg)](https://github.com/daisuke-awaji/aws-emulator-wasm/actions/workflows/wasm.yml)
+[![Live demo](https://img.shields.io/badge/demo-GitHub%20Pages-000?logo=github)](https://daisuke-awaji.github.io/aws-emulator-wasm/)
+![wasm32-wasip1](https://img.shields.io/badge/target-wasm32--wasip1-654ff0?logo=webassembly&logoColor=white)
+![AWS SDK v3](https://img.shields.io/badge/AWS%20SDK-v3-232f3e)
 
-## なぜ
+[**Live demo**](https://daisuke-awaji.github.io/aws-emulator-wasm/) · [SDK round-trip tests](https://daisuke-awaji.github.io/aws-emulator-wasm/sdk.html) · [How it works](#how-it-works)
 
-リモートのコーディングエージェントが作ったアプリを人が確かめるとき、Docker や AWS アカウントを用意できるとは限りません。モックの裏側までブラウザの中にあれば、URL ひとつで共有できます。
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/img/readme-dark.png">
+  <img src="./docs/img/readme-light.png" alt="The Todo demo: React talks to MSW, whose handlers call AWS SDK v3, which calls the AWS Emulator running as wasm in a Web Worker. Todos live in DynamoDB, notes in S3 and the change log in SQS." width="900">
+</picture>
 
-<img src="./docs/img/arch-desktop.png" alt="構成図：ブラウザの中で React → fetch → MSW（Service Worker）→ 転送 → AWS SDK v3（MSW のハンドラ）→ postMessage → AWS Emulator（wasm、Web Worker）。エミュレーターの中に DynamoDB（Todo）、S3（メモ）、SQS（変更の記録）" width="720">
+</div>
 
-この図はデモの画面の上部にあるものと同じです（`demo/src/Architecture.jsx`）。AWS のアイコンは [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)（2026-07-31 版）、ほかのアイコンは [Lucide](https://lucide.dev/) です。
+## Why
 
-## 内部のアーキテクチャ
+A static site cannot talk to AWS, so a mock app usually needs a backend somewhere: a local stack in Docker, or a real account. That is a problem when the app was built by a remote coding agent and someone just wants to click through it.
 
-ファイル単位で、1 回の SDK 呼び出しがどこを通るかを描いた図です。上の段は CI と配信、下の大きな枠が 1 つのタブの中です。
+This project moves the backend into the page. The demo is plain static files on GitHub Pages. Its API calls are caught by [MSW](https://mswjs.io/), and the handlers use the real AWS SDK v3 against an emulator inside the same tab. Share the URL, and the whole stack comes with it.
 
-![内部のアーキテクチャ：CI（build → browser → deploy）から GitHub Pages に公開し、ブラウザのメインスレッド（React → Service Worker → MSW のハンドラ → backend.js → AWS SDK v3 → WasmRequestHandler → createEmulator）から postMessage で Web Worker（worker.mjs → aws-emulator.wasm の C ABI → tokio → MultiServiceRouter → DynamoDB・S3・SQS ほか → InMemoryEngine）へ渡る流れ](./docs/img/architecture.drawio.png)
+## Highlights
 
-- 元の図：[`docs/architecture/architecture.drawio`](./docs/architecture/architecture.drawio)。PNG（`docs/img/architecture.drawio.png`）にも図のデータを埋め込んであるので、そのまま draw.io で開いて編集できます。SVG は [`docs/architecture/architecture.svg`](./docs/architecture/architecture.svg)。
-- 図は `scripts/architecture.py` が座標から作ります。矢印はすべて縦か横の直線で、箱やラベルの上を通らないことをスクリプトが確かめます。書き直したら `python3 scripts/architecture.py && node scripts/render-architecture.mjs` で PNG と SVG を作り直します（描画に viewer.diagrams.net を使います）。
-- アイコン：AWS のサービスは AWS Architecture Icons、ほかは [Simple Icons](https://simpleicons.org/)（CC0、`docs/architecture/icons/`）。
+- **The real SDK, unchanged.** `DynamoDBClient`, `S3Client` and `SQSClient` work with one `clientConfig()`. Only the request handler is swapped: requests go to the Worker instead of the network.
+- **Upstream code, not a rewrite.** The Rust emulator is built for `wasm32-wasip1` from a pinned upstream commit with a small patch set. A 280-line WASI shim runs it in browsers and Node.
+- **Survives a reload.** With `persist`, the Worker saves a gzip snapshot of the wasm memory to OPFS when requests pause, and restores it before `ready`.
+- **One tab owns the state.** A second tab waits and can take over (Web Locks), so two tabs never overwrite each other's data.
+- **No waiting on timers.** A virtual clock skips ahead when the emulator sleeps, for example while a new DynamoDB table "becomes active".
+- **Every call is visible.** `onCall` reports each request with its status and timing. The demo shows them per action: adding a todo is 6 SDK calls.
 
-### SDK の呼び出し回数
-
-デモの「SDK の呼び出し」欄は、操作ごとにエミュレーターが受けた呼び出しを並べます。画面は変更の API を呼んだあと、一覧と変更の記録を読み直すので、Todo を 1 件追加すると 6 回になります。
-
-「SDK の呼び出し」欄の行は `docs.send(UpdateCommand) → UpdateItem` のように `backend.js` のコードと同じ形で出し、開くと SDK に渡した入力と返ってきた出力（またはエラー）が見られます。記録は `demo/src/emulator.js` で各クライアントの `send` を包んで取り（`instrument()`、`demo/src/calls.js`）、HTTP の要求に付けた `x-demo-sdk-call` ヘッダーで `onCall` の応答と結び付けています。
-
-| 呼び出し | API | 目的 |
-|---|---|---|
-| DynamoDB PutItem | `POST /api/todos` | Todo を保存する |
-| SQS SendMessage | `POST /api/todos` | 「追加」の記録を送る |
-| DynamoDB Scan | `GET /api/todos` | 一覧を読み直す |
-| SQS ReceiveMessage | `GET /api/activity` | 記録を受け取る（1 件） |
-| SQS DeleteMessageBatch | `GET /api/activity` | 受け取った記録を消す |
-| SQS ReceiveMessage | `GET /api/activity` | キューが空であることを確かめる |
-
-起動時の準備（テーブル・バケット・キューの作成、初期データ 3 件、最初の読み込み）は 13 回です。累計の欄はこの 13 回を含みます。保存した状態を復元したときは、キューの URL を引き直す GetQueueUrl と最初の読み込みで 3 回です。
-
-## 使い方（ブラウザ）
+## Quick start
 
 ```js
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, ListTablesCommand } from '@aws-sdk/client-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
 import { createEmulator } from 'aws-emulator-wasm/browser';
 
 const emulator = createEmulator({ wasmUrl: '/aws-emulator.wasm' });
+
 const ddb = new DynamoDBClient(emulator.clientConfig());
 const s3 = new S3Client(emulator.clientConfig({ forcePathStyle: true }));
+
+await ddb.send(new ListTablesCommand({}));
 ```
 
-- 既定では、状態はメモリの中だけにあり、ページを閉じると消えます。
-- `persist: { name }` を渡すと、再読み込みしても状態が残ります（下の「状態の保存」）。
-- `createEmulator({ onCall })` を渡すと、エミュレーターが応答するたびに `{ seq, method, url, headers, status, ms }` で呼ばれます。デモはこれで「SDK の呼び出し」欄を作っています（`demo/src/calls.js`）。
-- 時計は「仮想時計」が既定です。エミュレーターが待つ場面（作成直後の DynamoDB テーブルなど）では待たずに時計を進めます。詳しくは [Phase 1 レポート](./docs/phase1-report.md#2-設計で決めたこと)を参照してください。
-- 載っているサービス：DynamoDB、S3、SQS と、それらが依存するサービス（計 13）。
+> [!NOTE]
+> The package is not on npm yet. Use it from this repository's npm workspace (`js/`), and copy the wasm from the CI artifact `aws-emulator-wasm` (see [Development](#development)).
 
-### 状態の保存
+### Keep state across reloads
 
 ```js
 const emulator = createEmulator({
   wasmUrl: '/aws-emulator.wasm',
   persist: { name: 'my-app' },
-  onLock: (state) => {}, // 'waiting' | 'held' | 'lost'
+  onLock: (state) => console.log(state), // 'waiting' | 'held' | 'lost'
 });
-const { persistence } = await emulator.ready; // { enabled, restored, savedAt?, discarded? }
+
+const { persistence } = await emulator.ready;
+// { enabled: true, restored: true, savedAt: '2026-11-16T11:26:06.000Z' }
 ```
 
-- **保存のしかた**：要求が 100 ms 途切れたら、Worker が wasm のメモリをまるごと gzip にして、OPFS（`aws-emulator-wasm/<name>/`）に保存します。いまの大きさは 2.5 MB ほどで、1 回に 250 ms ほどかかります。要求を止めるのは、メモリを写す数 ms だけです。
-- **読み込み**：次に開いたとき、`ready` の前に新しいインスタンスへ書き戻します。DynamoDB・S3・SQS の中身も、メッセージが見えなくなっている時間も、そのまま続きます。
-- **wasm が新しい版のとき**：保存した wasm の SHA-256 が今の wasm と違えば、保存データは使わずに捨てます（`discarded: 'version'`）。ほかのビルドのメモリは読めないためです。
-- **途中で閉じたとき**：保存先は 2 つの枠で、交互に書きます。書いている途中でタブを閉じても、1 つ前の状態が残ります（`discarded: 'corrupt'` で知らせます）。
-- **複数のタブ**：同じ `name` で動かせるのは 1 つのタブだけです（Web Locks）。2 つ目のタブは `onLock('waiting')` で待ち、`takeOver()` で引き継げます。引き継がれた側は `onLock('lost')` になり、止まります。
-- **そのほかの操作**：`flush()` は、そこまでの応答を保存し終えたら resolve します。`reset()` は、エミュレーターを止めて保存データを消します（そのあと、ページを読み込み直してください）。
-- **保存されない場合**：保存が終わる前にタブを閉じると、最後の操作は残りません。また、ブラウザが保存データを消すことがあります（容量が足りないとき。Safari は 7 日間操作のないサイトのデータを消します）。
-- **決めた経緯**：方式の比較と実験は [docs/persistence-design.md](./docs/persistence-design.md) にまとめました。
-
-## ドキュメント
-
-- [PLAN.md](./PLAN.md)：計画書（構成、上流の調査結果、設計判断、段階計画、リスク）
-- [docs/phase0-report.md](./docs/phase0-report.md)：Phase 0（wasm 向けビルド検証）の結果
-- [docs/phase05-report.md](./docs/phase05-report.md)：Phase 0.5（wasm のビルドと Node での往復）の結果
-- [docs/phase1-report.md](./docs/phase1-report.md)：Phase 1（ブラウザ、Todo デモ、Pages 公開）の結果
-- [docs/persistence-design.md](./docs/persistence-design.md)：状態の保存（メモリのスナップショット）の検討と実験
-- [PROGRESS.md](./PROGRESS.md)：進捗の記録
-
-## 上流
-
-- リポジトリ：https://github.com/aws/aws-emulator
-- 調査した commit：`813af480bf7f16d5418b64e4f5644a74a7da11c5`（2026-11-14）
-- このリポジトリは上流のコードを含みません。取得スクリプトで固定 commit を取り寄せ、パッチを当てて使います。
-
-## 構成
-
-| 場所 | 役割 |
+| Event | What happens |
 |---|---|
-| `scripts/fetch-upstream.sh [dest] [起点クレート...]` | 上流を sparse checkout し、閉包に絞り、wasm パッチを当てる（`SKIP_WASM_PATCH=1` で当てない） |
-| `scripts/closure.py` | 起点クレートからの path 依存の閉包を出す |
-| `scripts/trim_workspace.py` | workspace の members を閉包に絞り、dev-dependencies を外す |
-| `scripts/patch_wasm.py` | wasm32 用のパッチ集（P1〜P4）。`patches/files/` を使う |
-| `scripts/architecture.py`・`scripts/render-architecture.mjs` | 内部のアーキテクチャ図（draw.io）を作り、PNG と SVG に描く |
-| `crates/wasm-host/` | wasm の入口（router と C ABI） |
-| `js/`（npm workspace `aws-emulator-wasm`） | WASI シム、Node とブラウザのローダー、SDK v3 の request handler、テスト |
-| `demo/` | Vite + React + MSW の Todo デモ、SDK テストページ、Playwright のテスト |
-| `.github/workflows/wasm.yml` | CI：wasm のビルドとサイズ計測 → Node テスト → ブラウザテスト → Pages へのデプロイ |
+| Requests pause for 100 ms | The Worker copies the wasm memory (a few ms) and writes a gzip snapshot to OPFS in the background (about 2.5 MB and 250 ms today). |
+| Page loads | The snapshot is written back before `ready` resolves: tables, objects, queues and in-flight message visibility all carry on. |
+| A new wasm build is deployed | The snapshot belongs to another build, so it is dropped and the emulator starts empty (`discarded: 'version'`). |
+| The tab closes mid-write | Snapshots alternate between two slots, so the previous one is still there (`discarded: 'corrupt'`). |
+| A second tab opens | It waits (`onLock('waiting')`). `takeOver()` moves the emulator to it, and the first tab stops (`'lost'`). |
 
-手順は [Phase 1 レポートの「再現」](./docs/phase1-report.md#5-再現)と [Phase 0.5 レポートの「再現」](./docs/phase05-report.md#5-再現)（wasm のビルド）を参照してください。
+`flush()` resolves once everything answered so far is saved. `reset()` stops the emulator and deletes the saved state.
+
+> [!WARNING]
+> A tab closed before the last save finishes loses that last action. Browsers may also evict site data under storage pressure, and Safari deletes it after 7 days without use.
+
+### API
+
+| | |
+|---|---|
+| `createEmulator(options)` | Starts the Worker. `options.wasmUrl` is required. |
+| `options.clock` | `'virtual'` (default) or `'real'`. |
+| `options.persist` | `false` (default) or `{ name, takeOver? }`. |
+| `options.onCall(call)` | `{ seq, method, url, headers, status, ms, startedAt }` for every answered request. |
+| `options.onLock(state)` / `options.onSave(event)` / `options.onLog(stream, line)` | Lock changes, finished saves, and the emulator's stdout and stderr. |
+| `emulator.ready` | Resolves with `stats` once the wasm is instantiated (and restored). |
+| `emulator.clientConfig(overrides?)` | SDK client settings: region, dummy credentials, endpoint and the wasm request handler. |
+| `emulator.fetch(request)` / `emulator.requestHandler` | The same transport, for code that does not use the SDK. |
+| `emulator.stats` | Request count, virtual time skipped, load timings and persistence state. |
+| `emulator.flush()` / `reset()` / `takeOver()` / `terminate()` | See above. |
+
+Node has its own loader: `aws-emulator-wasm/node`.
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph tab["Browser tab"]
+    direction LR
+    UI["React<br/>fetch('/api/todos')"] --> SW["MSW<br/>Service Worker"]
+    SW --> H["Handlers<br/>AWS SDK v3"]
+    H -- "postMessage" --> W
+    subgraph W["Web Worker"]
+      direction TB
+      E["aws-emulator.wasm<br/>DynamoDB · S3 · SQS"]
+    end
+    W -. "snapshots" .-> O[("OPFS")]
+  end
+  P["GitHub Pages<br/>static files"] -- "one download" --> tab
+```
+
+1. The app calls its own API with `fetch`. MSW catches the request in the page.
+2. The handler runs ordinary SDK code: `docs.send(new PutCommand(...))`.
+3. `WasmRequestHandler` encodes the signed HTTP request and posts it to the Worker.
+4. The Worker passes it to the wasm through a small C ABI. Inside, upstream's `MultiServiceRouter` dispatches it to the service, backed by the in-memory engine.
+5. The response travels back the same way. After the wasm download, nothing leaves the tab.
+
+The build includes DynamoDB, S3 and SQS plus the services they depend on, 13 in total. The optimized wasm is 26.6 MiB, or 8.8 MiB as GitHub Pages serves it (gzip).
+
+For a file-by-file view, see the [internal architecture diagram](./docs/img/architecture.drawio.png) (editable in draw.io; generated by `scripts/architecture.py`).
+
+## Development
+
+Requires Node 22+. Building the wasm also needs Rust 1.100.0 with `wasm32-wasip1`, wasi-sdk 34 and about 20 GB of disk; CI does this for you.
+
+```bash
+npm ci
+
+# Get the wasm: download the "aws-emulator-wasm" artifact from a CI run, or build it
+bash scripts/fetch-upstream.sh .upstream   # pinned upstream + wasm patches
+(cd .upstream && \
+  CARGO_PROFILE_RELEASE_OPT_LEVEL=s \
+  CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="-C link-arg=-zstack-size=8388608" \
+  cargo build --release --target wasm32-wasip1 -p aws-emulator-wasm-host)
+
+export EMULATOR_WASM=path/to/aws-emulator.opt.wasm
+npm test -w js                    # Node: WASI shim, codec, SDK round trips, snapshots
+npm run wasm -w demo              # copy the wasm into demo/public/
+npm run dev -w demo               # http://localhost:5173/
+npx -w demo playwright install chromium
+npm run test:e2e -w demo          # Playwright, desktop and mobile
+```
+
+C dependencies need `CC_wasm32_wasip1`, `AR_wasm32_wasip1` and `CFLAGS_wasm32_wasip1` pointed at wasi-sdk; the `wasm-opt -Oz` step and the rest are in [`.github/workflows/wasm.yml`](./.github/workflows/wasm.yml). Every push to `main` builds the wasm, runs the Node and Playwright suites, and deploys the demo to Pages.
+
+### Layout
+
+```
+crates/wasm-host/   wasm entry point: router and C ABI
+js/                 WASI shim, browser and Node loaders, SDK request handler, snapshots
+demo/               Vite + React + MSW Todo demo, SDK test page, Playwright tests
+scripts/            fetch and trim upstream, apply wasm patches, draw the architecture
+patches/            the wasm32 patch set (P1–P4)
+docs/               design notes and phase reports
+```
+
+## Status
+
+| | |
+|---|---|
+| ✅ Phase 0 | Upstream type-checks for `wasm32-wasip1` with a small patch set and wasi-sdk |
+| ✅ Phase 0.5 | The wasm answers AWS SDK v3 in Node |
+| ✅ Phase 1 | Runs in a browser Worker; MSW Todo demo on GitHub Pages |
+| 🚧 Phase 2 | ✅ Snapshots and one-tab locking · ⬜ smaller wasm and faster first load · ⬜ recovery after a panic |
+
+## Docs
+
+Design notes and reports are written in Japanese.
+
+- [PLAN.md](./PLAN.md): plan, upstream survey, design decisions and risks
+- [docs/persistence-design.md](./docs/persistence-design.md): persistence options, experiments and the chosen design
+- [docs/phase1-report.md](./docs/phase1-report.md), [phase05](./docs/phase05-report.md), [phase0](./docs/phase0-report.md): phase reports
+- [PROGRESS.md](./PROGRESS.md): work log
+
+## Upstream
+
+This repository contains no upstream code. `scripts/fetch-upstream.sh` checks out [aws/aws-emulator](https://github.com/aws/aws-emulator) at a pinned commit (`813af480`, 2026-11-14), trims it to the crates in use and applies the patches.
+
+AWS service icons are from [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/). Other icons are from [Lucide](https://lucide.dev/) and [Simple Icons](https://simpleicons.org/).

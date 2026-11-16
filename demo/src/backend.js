@@ -41,7 +41,7 @@ async function setup() {
   ({ QueueUrl: queueUrl } = await sqs.send(new CreateQueueCommand({ QueueName: QUEUE })));
 
   const seeds = [
-    { title: 'AWS Emulator を wasm にビルドする', done: true, note: 'Phase 0.5 で完了。wasm32-wasip1 向け。' },
+    { title: 'AWS Emulator を wasm にビルドする', done: true, note: 'wasm32-wasip1 向けにビルドする。' },
     { title: 'ブラウザの Worker で動かす', done: true },
     { title: 'MSW のハンドラから DynamoDB・S3・SQS を呼ぶ', done: false },
   ];

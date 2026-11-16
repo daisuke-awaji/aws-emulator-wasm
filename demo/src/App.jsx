@@ -113,10 +113,7 @@ export function App({ mocking, readyIn }) {
 
       <div className="page">
         <header className="hero">
-          <p className="eyebrow">
-            <span className="eyebrow-tag">Phase 1</span>
-            すべてブラウザの中で動きます
-          </p>
+          <p className="eyebrow">すべてブラウザの中で動きます</p>
           <h1>Todo</h1>
           <p className="lead">
             サーバーなしで動く Todo です。画面の通信は MSW が受け取り、ハンドラが AWS SDK v3 で

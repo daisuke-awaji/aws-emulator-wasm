@@ -78,7 +78,7 @@ test('a note is saved to S3 and read back', async ({ page }) => {
 
   // The seeded note on the first todo comes from S3 too.
   await page.getByRole('button', { name: `「${SEEDS[0]}」のメモ` }).click();
-  await expect(item(page, SEEDS[0]).getByLabel('メモ（S3 に保存）')).toHaveValue('Phase 0.5 で完了。wasm32-wasip1 向け。');
+  await expect(item(page, SEEDS[0]).getByLabel('メモ（S3 に保存）')).toHaveValue('wasm32-wasip1 向けにビルドする。');
 });
 
 test('an empty title is rejected by the handler with a message', async ({ page }) => {
