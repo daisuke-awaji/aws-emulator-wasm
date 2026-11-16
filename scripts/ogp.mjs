@@ -1,7 +1,8 @@
-// Renders the OGP (social preview) image candidates, 1200×630, to docs/img/ogp/.
+// Renders the OGP (social preview) image candidates, 1200×630, to docs/img/ogp/, and copies
+// the chosen one to demo/public/og.png. Only the chosen candidate's PNG is committed.
 //   node scripts/ogp.mjs            (uses Playwright from the demo workspace)
 // Each design is plain HTML with the repo's own fonts, logos and AWS service icons.
-import { mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
@@ -166,3 +167,8 @@ for (const [name, body] of Object.entries(designs)) {
   console.log(`docs/img/ogp/ogp-${name}.png`);
 }
 await browser.close();
+
+// The design in use: served by the demo as /og.png (see demo/index.html).
+const CHOSEN = 'a-light';
+copyFileSync(resolve(out, `ogp-${CHOSEN}.png`), resolve(root, 'demo/public/og.png'));
+console.log(`demo/public/og.png <- ogp-${CHOSEN}.png`);
