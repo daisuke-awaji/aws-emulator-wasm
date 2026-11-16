@@ -16,6 +16,7 @@
     "@aws-sdk/client-sqs": "^3",
     "@aws-sdk/lib-dynamodb": "^3",
     "aws-emulator-wasm": "*",
+    "lucide-react": "^1.73.0",
     "msw": "^3",
     "react": "^19",
     "react-dom": "^19"

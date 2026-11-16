@@ -95,3 +95,19 @@ test('the REST API answers fetch() from the page through MSW', async ({ page }) 
   });
   expect(result).toEqual({ missing: [404, { message: 'Todo が見つかりません' }], bad: 400, count: 3 });
 });
+
+test('the architecture diagram shows the path and the emulator is running', async ({ page }) => {
+  const diagram = page.getByRole('list', { name: '構成' });
+  await expect(diagram.locator('strong')).toHaveText(['React', 'MSW', 'AWS SDK v3', 'AWS Emulator（wasm）', 'DynamoDB', 'S3', 'SQS']);
+  await expect(diagram.getByRole('listitem', { name: /で渡す$/ })).toHaveText(['fetch', '転送', 'postMessage']);
+  await expect(diagram.getByRole('img', { name: '動作中' })).toBeVisible();
+  await expect(page.getByRole('list', { name: '使っているサービス' }).getByRole('listitem')).toHaveText([/DynamoDB/, /S3/, /SQS/]);
+  // The arrows never run across a box.
+  const crossings = await page.evaluate(() => {
+    const boxes = [...document.querySelectorAll('.arch-node, .arch-emulator')].map((e) => e.getBoundingClientRect());
+    const lines = [...document.querySelectorAll('.arch-edge-line, .arch-edge-label')].map((e) => e.getBoundingClientRect());
+    const hit = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+    return lines.flatMap((l, i) => boxes.filter((b) => hit(l, b)).map(() => i));
+  });
+  expect(crossings).toEqual([]);
+});

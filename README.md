@@ -13,9 +13,9 @@
 
 リモートのコーディングエージェントが作ったアプリを人が確かめるとき、Docker や AWS アカウントを用意できるとは限りません。モックの裏側までブラウザの中にあれば、URL ひとつで共有できます。
 
-```text
-React アプリ ─ fetch ─▶ MSW ─▶ ハンドラ ─ AWS SDK v3 ─▶ Web Worker ─▶ AWS Emulator (wasm)
-```
+<img src="./docs/img/arch-desktop.png" alt="構成図：ブラウザの中で React → fetch → MSW（Service Worker）→ 転送 → AWS SDK v3（MSW のハンドラ）→ postMessage → AWS Emulator（wasm、Web Worker）。エミュレーターの中に DynamoDB（Todo）、S3（メモ）、SQS（変更の記録）" width="720">
+
+この図はデモの画面の上部にあるものと同じです（`demo/src/Architecture.jsx`）。AWS のアイコンは [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)（2026-07-31 版）、ほかのアイコンは [Lucide](https://lucide.dev/) です。
 
 ## 使い方（ブラウザ）
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Architecture } from './Architecture.jsx';
 
 const REPO = 'https://github.com/daisuke-awaji/aws-emulator-wasm';
 
@@ -60,11 +61,7 @@ export function App({ mocking, readyIn }) {
           サーバーなしで動く Todo です。画面の通信は MSW が受け取り、ハンドラが AWS SDK v3 で
           <strong>ブラウザ内の AWS Emulator（wasm）</strong>を呼びます。Todo は DynamoDB、メモは S3、変更の記録は SQS に入ります。
         </p>
-        <ol className="flow" aria-label="構成">
-          {['React', 'fetch', 'MSW', 'AWS SDK v3', 'Web Worker', 'AWS Emulator（wasm）'].map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
+        <Architecture state={boot.state} />
       </header>
 
       {boot.state === 'loading' && (

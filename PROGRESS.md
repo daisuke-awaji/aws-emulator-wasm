@@ -22,3 +22,9 @@
 - 公開サイトを手元の Chromium で確認：Todo 表示まで 1.0〜1.3 秒、通信先は github.io だけ、例外 0 件。wasm の転送量は gzip で 8.8 MiB。
 - つまずき：cargo build 版は `fd_seek` を import する（wasm-opt 版にはない）。シムに足し、未知の関数は ENOSYS にした。
 - 結果は docs/phase1-report.md。
+
+## 2026-11-16 構成図
+- Todo デモの構成図を、アイコン付きの図（`demo/src/Architecture.jsx`）に置き換えた。AWS のサービスは AWS Architecture Icons（2026-07-31 版、48 px）、ほかは lucide-react。
+- 幅 600 px 以上では 3 つの箱を横に並べ、エミュレーターへは真下に 1 本の矢印。狭い画面では縦に並べ、矢印はすべて下向きの直線（折れ線なし）。
+- エミュレーターの状態（読み込み中・動作中・失敗）を色の点で示す。
+- Playwright に構成図のテストを追加（矢印と箱が重ならないことも確かめる）。14 テスト pass。
