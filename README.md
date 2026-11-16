@@ -82,7 +82,7 @@ const { persistence } = await emulator.ready;
 
 ### API
 
-| | |
+| Name | Description |
 |---|---|
 | `createEmulator(options)` | Starts the Worker. `options.wasmUrl` is required. |
 | `options.clock` | `'virtual'` (default) or `'real'`. |
@@ -100,19 +100,18 @@ Node has its own loader: `aws-emulator-wasm/node`.
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TB
+  P["GitHub Pages<br/>static files only"] -- "one download: HTML, JS, wasm" --> UI
   subgraph tab["Browser tab"]
     direction LR
     UI["React<br/>fetch('/api/todos')"] --> SW["MSW<br/>Service Worker"]
     SW --> H["Handlers<br/>AWS SDK v3"]
-    H -- "postMessage" --> W
+    H -- "postMessage" --> E
     subgraph W["Web Worker"]
-      direction TB
       E["aws-emulator.wasm<br/>DynamoDB · S3 · SQS"]
     end
-    W -. "snapshots" .-> O[("OPFS")]
+    E -. "snapshots" .-> O[("OPFS")]
   end
-  P["GitHub Pages<br/>static files"] -- "one download" --> tab
 ```
 
 1. The app calls its own API with `fetch`. MSW catches the request in the page.
@@ -162,7 +161,7 @@ docs/               design notes and phase reports
 
 ## Status
 
-| | |
+| Phase | Result |
 |---|---|
 | ✅ Phase 0 | Upstream type-checks for `wasm32-wasip1` with a small patch set and wasi-sdk |
 | ✅ Phase 0.5 | The wasm answers AWS SDK v3 in Node |
