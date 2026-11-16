@@ -9,3 +9,4 @@ demo/playwright-report/
 demo/test-results/
 demo/dist-web-function/
 demo/.env.*.local
+demo/env.*.local
