@@ -7,7 +7,7 @@ import re
 import sys
 
 root = pathlib.Path(sys.argv[1]) / "Cargo.toml"
-members = [m for m in sys.argv[2:] if m.startswith(("services/", "core/"))]
+members = [m for m in sys.argv[2:] if m.startswith(("services/", "core/", "wasm-host"))]
 text = root.read_text()
 body = "members = [\n" + "".join(f'    "{m}",\n' for m in members) + "]"
 text, n = re.subn(r"members = \[\n.*?\n\]", body, text, count=1, flags=re.S)

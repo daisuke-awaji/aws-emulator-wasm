@@ -1,0 +1,150 @@
+name: wasm
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wasm-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_VERSION: "1.100.0"
+  WASI_SDK_VERSION: "34"
+  CARGO_TARGET_DIR: ${{ github.workspace }}/target
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_RELEASE_OPT_LEVEL: "s"
+  CARGO_PROFILE_RELEASE_DEBUG: "false"
+  # Service constructors use large stack frames; the default 1 MiB wasm stack is too small.
+  CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS: "-C link-arg=-zstack-size=8388608"
+  WASM: target/wasm32-wasip1/release/aws_emulator_wasm_host.wasm
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --target wasm32-wasip1
+          rustup default "$RUST_VERSION"
+          rustc --version
+
+      - name: Install wasi-sdk
+        run: |
+          curl -sSfL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz" \
+            | tar xz -C "$RUNNER_TEMP"
+          W="$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux"
+          {
+            echo "CC_wasm32_wasip1=$W/bin/clang"
+            echo "AR_wasm32_wasip1=$W/bin/llvm-ar"
+            echo "CFLAGS_wasm32_wasip1=--sysroot=$W/share/wasi-sysroot"
+          } >> "$GITHUB_ENV"
+
+      - name: Fetch upstream and apply the wasm patch set
+        run: bash scripts/fetch-upstream.sh "$GITHUB_WORKSPACE/.upstream"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: wasm-${{ env.RUST_VERSION }}-${{ hashFiles('scripts/**', 'patches/**', 'crates/**') }}
+          restore-keys: wasm-${{ env.RUST_VERSION }}-
+
+      - name: Build the wasm emulator
+        working-directory: .upstream
+        run: |
+          start=$(date +%s)
+          cargo build --release --target wasm32-wasip1 -p aws-emulator-wasm-host
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          ls -l "$GITHUB_WORKSPACE/$WASM"
+          df -h /
+
+      - name: Optimize with wasm-opt
+        id: opt
+        continue-on-error: true
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R WebAssembly/binaryen --pattern 'binaryen-*-x86_64-linux.tar.gz' -O - | tar xz -C "$RUNNER_TEMP"
+          OPT=$(ls -d "$RUNNER_TEMP"/binaryen-*/bin)/wasm-opt
+          "$OPT" --version
+          "$OPT" -Oz "$WASM" -o target/aws-emulator.opt.wasm
+
+      - name: Measure sizes
+        run: |
+          sudo apt-get install -y -qq brotli > /dev/null
+          row() {
+            [ -f "$1" ] || return 0
+            raw=$(stat -c %s "$1")
+            gz=$(gzip -9 -c "$1" | wc -c)
+            br=$(brotli -q 11 -c "$1" | wc -c)
+            printf '| %s | %.1f MB | %.1f MB | %.1f MB |\n' "$2" "$(echo "$raw/1048576" | bc -l)" "$(echo "$gz/1048576" | bc -l)" "$(echo "$br/1048576" | bc -l)"
+          }
+          {
+            echo "## wasm build"
+            echo
+            echo "- rustc $RUST_VERSION, wasi-sdk $WASI_SDK_VERSION, opt-level=$CARGO_PROFILE_RELEASE_OPT_LEVEL"
+            echo "- build time: ${BUILD_SECONDS}s"
+            echo "- wasm-opt: ${{ steps.opt.outcome }}"
+            echo
+            echo "| file | raw | gzip -9 | brotli -q 11 |"
+            echo "|---|---|---|---|"
+            row "$WASM" "cargo build --release"
+            row target/aws-emulator.opt.wasm "wasm-opt -Oz"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: JS tests against the cargo build
+        working-directory: js
+        env:
+          EMULATOR_WASM: ${{ github.workspace }}/${{ env.WASM }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm test 2>&1 | tee "$RUNNER_TEMP/test-raw.log"
+          {
+            echo
+            echo "### Node (cargo build)"
+            echo '```'
+            grep -E '^# ' "$RUNNER_TEMP/test-raw.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: JS tests against the wasm-opt build
+        if: steps.opt.outcome == 'success'
+        working-directory: js
+        env:
+          EMULATOR_WASM: ${{ github.workspace }}/target/aws-emulator.opt.wasm
+        run: npm test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aws-emulator-wasm
+          path: |
+            ${{ env.WASM }}
+            target/aws-emulator.opt.wasm
+          if-no-files-found: error
+          retention-days: 14

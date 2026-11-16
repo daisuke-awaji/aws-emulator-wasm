@@ -1,0 +1,18 @@
+{
+  "name": "aws-emulator-wasm-js",
+  "private": true,
+  "type": "module",
+  "description": "JS host for the aws-emulator wasm build: loader, SDK request handler and tests",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@smithy/protocol-http": "^5",
+    "@smithy/querystring-builder": "^4"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3",
+    "@aws-sdk/client-sqs": "^3"
+  }
+}

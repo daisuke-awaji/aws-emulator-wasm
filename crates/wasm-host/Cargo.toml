@@ -1,0 +1,30 @@
+# Copied into the upstream checkout as `wasm-host/` by scripts/fetch-upstream.sh.
+[package]
+name = "aws-emulator-wasm-host"
+version = "0.0.0"
+edition.workspace = true
+license = "Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+engine = { workspace = true }
+smithy-server-runtime = { workspace = true }
+bytes = { workspace = true }
+http = { workspace = true }
+tokio = { version = "1", features = ["rt", "time"] }
+service-com-amazonaws-cloudhsmv2-baldrapiservice = { workspace = true }
+service-com-amazonaws-cloudwatch-graniteserviceversion20100801 = { workspace = true }
+service-com-amazonaws-cognitoidentityprovider-awscognitoidentityproviderservice = { workspace = true }
+service-com-amazonaws-dynamodb-dynamodb-20120810 = { workspace = true }
+service-com-amazonaws-dynamodbstreams-dynamodbstreams-20120810 = { workspace = true }
+service-com-amazonaws-iam-awsidentitymanagementv20100508 = { workspace = true }
+service-com-amazonaws-kinesis-kinesis-20131202 = { workspace = true }
+service-com-amazonaws-kms-trentservice = { workspace = true }
+service-com-amazonaws-s3-amazons3 = { workspace = true }
+service-com-amazonaws-s3tables-s3tablebuckets = { workspace = true }
+service-com-amazonaws-sqs-amazonsqs = { workspace = true }
+service-com-amazonaws-sts-awssecuritytokenservicev20110615 = { workspace = true }
+service-com-amazonaws-wafv2-awswaf-20190729 = { workspace = true }

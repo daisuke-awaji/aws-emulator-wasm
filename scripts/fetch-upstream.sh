@@ -22,7 +22,8 @@ git checkout -q -- .
 CLOSURE=$(python3 "$HERE/closure.py" "$@")
 # shellcheck disable=SC2046
 git sparse-checkout add $(printf '/%s/\n' $CLOSURE)
-python3 "$HERE/trim_workspace.py" . $CLOSURE
+rm -rf wasm-host && cp -r "$HERE/../crates/wasm-host" wasm-host
+python3 "$HERE/trim_workspace.py" . $CLOSURE wasm-host
 if [ "${SKIP_WASM_PATCH:-0}" != 1 ]; then python3 "$HERE/patch_wasm.py" .; fi
 echo "$CLOSURE" > .closure
 echo "upstream ready at $DEST ($UPSTREAM_COMMIT)"

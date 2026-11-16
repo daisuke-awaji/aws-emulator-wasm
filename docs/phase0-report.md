@@ -39,7 +39,7 @@
 | 5 | `aws-emulator-server`：14 エラー | `axum_server`、`tokio::net::TcpListener`、`tokio::signal` | ポートを開く・TLS・シグナル処理を wasm では外す。リソース用 listener は「wasm では使えない」というエラーを返す |
 | 6 | `service-common`：`compile_error!`（`panic = "unwind"` が必須） | JSONata の評価を `catch_unwind` で囲んでいる。wasm32 は既定で `panic = abort` | wasm ではこの検査を外す（実行時のリスクとして下に記録） |
 | 7 | cloudwatch：`tokio::task::block_in_place` が無い | multi-thread ランタイム専用の API | wasm ではその分岐を外す（もともと current-thread では `work()` を直接実行する分岐がある） |
-| — | **exit 0**（警告 36 件、多くは cfg で使われなくなった項目） | | `docs/logs/phase0-check-final.log` |
+| — | **exit 0**（警告 36 件、多くは cfg で使われなくなった項目） | | `docs/logs/phase0-check-final.txt` |
 
 ## 4. パッチ集
 
