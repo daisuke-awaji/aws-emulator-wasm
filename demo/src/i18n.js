@@ -27,6 +27,12 @@ const messages = {
     'status.ready': '動作中',
     'status.failed': '停止',
     'status.signedOut': '未サインイン',
+    'status.idle': '未起動',
+    'arch.idle': '未起動',
+    'start.title': 'エミュレーターを起動',
+    'start.body': 'DynamoDB・S3・SQS のエミュレーター（wasm、約 9 MB、圧縮後）と AWS SDK をダウンロードして、このタブの中で動かします。ここまでの画面は読み込み済みのファイルだけで表示しています。',
+    'start.button': 'ダウンロードして起動',
+    'start.note': '一度起動すると、このブラウザでは次から自動で起動します。',
 
     // Hero
     eyebrow: 'すべてブラウザの中で動きます',
@@ -241,6 +247,12 @@ const messages = {
     'status.ready': 'Running',
     'status.failed': 'Stopped',
     'status.signedOut': 'Signed out',
+    'status.idle': 'Not started',
+    'arch.idle': 'Not started',
+    'start.title': 'Start the emulator',
+    'start.body': 'This downloads the DynamoDB, S3 and SQS emulator (wasm, about 9 MB compressed) and the AWS SDK, and runs them in this tab. So far the page has loaded only what you see.',
+    'start.button': 'Download and start',
+    'start.note': 'Once started, it starts by itself on your next visit in this browser.',
 
     eyebrow: 'Everything runs in your browser',
     lead: (strong) => [

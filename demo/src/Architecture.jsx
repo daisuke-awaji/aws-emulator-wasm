@@ -31,7 +31,7 @@ function Edge({ label: key, className = '' }) {
   );
 }
 
-/** The architecture diagram. `state` is 'loading' | 'ready' | 'failed' and colors the emulator. */
+/** The architecture diagram. `state` is 'idle' | 'loading' | 'ready' | 'failed' and colors the emulator. */
 export function Architecture({ state }) {
   return (
     <figure className={`arch is-${state}`} aria-labelledby="arch-title">

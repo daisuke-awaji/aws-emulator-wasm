@@ -1,6 +1,7 @@
 import {
   ArrowUpRight,
   Boxes,
+  Play,
   Check,
   Cloud,
   CornerDownLeft,
@@ -144,9 +145,16 @@ function Page() {
   useLang(); // everything below re-renders in the new language
   const runtime = useRuntime();
   const aws = runtime.target === "aws";
-  const [boot, setBoot] = useState({ state: "loading" });
+  // The emulator build starts idle: nothing is downloaded until the user asks for it.
+  const [boot, setBoot] = useState({
+    state: runtime.idle ? "idle" : "loading",
+  });
   const { lock, user } = useLive();
   const elapsed = useElapsed(boot.state === "loading" && lock !== "waiting");
+  const startEmulator = () => {
+    setBoot({ state: "loading" });
+    runtime.boot();
+  };
   const footer = useFooterHeight();
 
   useEffect(() => {
@@ -260,6 +268,25 @@ function Page() {
                   {t("tab.useHere")}
                 </button>
               </p>
+            </div>
+          </section>
+        )}
+        {state === "idle" && (
+          <section className="card boot start" aria-labelledby="start-title">
+            <div>
+              <h2 id="start-title">{t("start.title")}</h2>
+              <p className="muted">{t("start.body")}</p>
+              <p>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={startEmulator}
+                >
+                  <Play size={15} aria-hidden="true" />
+                  {t("start.button")}
+                </button>
+              </p>
+              <p className="muted small">{t("start.note")}</p>
             </div>
           </section>
         )}

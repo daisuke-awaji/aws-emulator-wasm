@@ -16,6 +16,8 @@ export default defineConfig({
     baseURL: `http://localhost:${port}${base}`,
     // The Japanese UI, as the browser language picks it; i18n.spec.js switches to English.
     locale: 'ja-JP',
+    // The emulator starts as on a return visit; start.spec.js covers the first visit's button.
+    storageState: 'e2e/autostart.json',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

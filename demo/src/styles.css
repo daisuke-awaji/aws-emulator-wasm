@@ -93,6 +93,9 @@ button.nav-link { gap: 6px; border: 0; background: none; font: inherit; font-siz
 .status-ready .dot { background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent); }
 .status-failed .dot { background: var(--danger); }
 .status-signedOut .dot { background: var(--warning); }
+.status-idle .dot { background: var(--border-strong); }
+.boot .small { font-size: 12px; }
+.start .btn svg { margin-right: 2px; }
 @keyframes pulse { 50% { opacity: 0.35; } }
 
 /* Page */
@@ -300,6 +303,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .arch-emulator-head .arch-where { margin-top: 0; align-self: center; }
 .arch-status { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 22%, transparent); }
 .arch.is-loading .arch-status { animation: pulse 1.2s ease-in-out infinite; }
+.arch.is-idle .arch-status { background: var(--border-strong); }
 .arch.is-ready .arch-status { background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent); }
 .arch.is-failed .arch-status { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent); }
 .arch-services { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
