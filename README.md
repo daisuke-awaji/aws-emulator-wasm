@@ -27,25 +27,11 @@
 - 図は `scripts/architecture.py` が座標から作ります。矢印はすべて縦か横の直線で、箱やラベルの上を通らないことをスクリプトが確かめます。書き直したら `python3 scripts/architecture.py && node scripts/render-architecture.mjs` で PNG と SVG を作り直します（描画に viewer.diagrams.net を使います）。
 - アイコン：AWS のサービスは AWS Architecture Icons、ほかは [Simple Icons](https://simpleicons.org/)（CC0、`docs/architecture/icons/`）。
 
-### Todo の操作ごとの SDK の実行
-
-Todo を操作すると、その Todo のすぐ下に、操作で実行した SDK が出ます。行を開くと、`backend.js` が SDK に渡した入力と、返ってきた出力（またはエラー）が見られます。追加と削除の結果は入力欄の下に出ます。変更のあとの読み直し（一覧と変更の記録）は「画面の読み直し」にまとめてあり、開くと同じように見られます。
-
-![Todo を完了にしたときの SDK の実行：docs.send(UpdateCommand) と sqs.send(SendMessageCommand)。UpdateCommand の行を開くと、入力（TableName・Key・UpdateExpression など）と出力（更新後の Attributes）が並ぶ](./docs/img/sdk-trace.png)
-
-| 操作 | 実行する SDK |
-|---|---|
-| 追加 | `docs.send(PutCommand)` → `sqs.send(SendMessageCommand)` |
-| 完了にする・未完了に戻す・名前を変更 | `docs.send(UpdateCommand)` → `sqs.send(SendMessageCommand)` |
-| メモを開く | `s3.send(GetObjectCommand)`（メモがまだないときは `NoSuchKey` が返り、`backend.js` が空のメモとして扱います） |
-| メモを保存 | `docs.send(UpdateCommand)`（hasNote）→ `s3.send(PutObjectCommand)`（空なら `DeleteObjectCommand`）→ `sqs.send(SendMessageCommand)` |
-| 削除 | `docs.send(DeleteCommand)` → `s3.send(DeleteObjectCommand)` → `sqs.send(SendMessageCommand)` |
-
-記録のしかた：`demo/src/emulator.js` で各クライアントの `send` を包み（`instrument()`、`demo/src/calls.js`）、コマンド名・入力・出力を残します。HTTP の要求には `x-demo-sdk-call` ヘッダーで番号を付け、`onCall` で受けた応答（状態コードと時間）と結び付けます。入力と出力は表示用に写しを取り、長い文字列や本文（ストリーム）は短くしています。
-
 ### SDK の呼び出し回数
 
 デモの「SDK の呼び出し」欄は、操作ごとにエミュレーターが受けた呼び出しを並べます。画面は変更の API を呼んだあと、一覧と変更の記録を読み直すので、Todo を 1 件追加すると 6 回になります。
+
+「SDK の呼び出し」欄の行は `docs.send(UpdateCommand) → UpdateItem` のように `backend.js` のコードと同じ形で出し、開くと SDK に渡した入力と返ってきた出力（またはエラー）が見られます。記録は `demo/src/emulator.js` で各クライアントの `send` を包んで取り（`instrument()`、`demo/src/calls.js`）、HTTP の要求に付けた `x-demo-sdk-call` ヘッダーで `onCall` の応答と結び付けています。
 
 | 呼び出し | API | 目的 |
 |---|---|---|

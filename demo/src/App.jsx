@@ -1,7 +1,7 @@
 import { ArrowUpRight, Boxes, Check, CornerDownLeft, FileText, Pencil, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Architecture } from './Architecture.jsx';
-import { CallLog, OpTrace } from './CallLog.jsx';
+import { CallLog } from './CallLog.jsx';
 
 const REPO = 'https://github.com/daisuke-awaji/aws-emulator-wasm';
 
@@ -150,7 +150,6 @@ function Todos({ bootMs }) {
   const [activity, setActivity] = useState([]);
   const [stats, setStats] = useState(null);
   const [groups, setGroups] = useState([]);
-  const [traceId, setTraceId] = useState(null); // the action whose SDK calls show next to its Todo
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const input = useRef(null);
@@ -160,9 +159,8 @@ function Todos({ bootMs }) {
   /**
    * Runs one change, then reloads the list and the activity one request after another.
    * The emulator's counter is read last, so it includes every call above.
-   * `target` is where the SDK calls show afterwards: a Todo's id, or 'list' (add and delete).
    */
-  const run = useCallback(async (label, fn, target = null) => {
+  const run = useCallback(async (label, fn) => {
     setBusy(true);
     setError('');
     let ok = false;
@@ -181,8 +179,7 @@ function Todos({ bootMs }) {
       if (calls.length) seen.current = calls[calls.length - 1].seq;
       setStats(emu);
       const id = ++groupId.current;
-      setGroups((old) => [{ id, label, ok, target, at: new Date().toISOString(), calls }, ...old].slice(0, 8));
-      setTraceId(target ? id : null);
+      setGroups((old) => [{ id, label, ok, at: new Date().toISOString(), calls }, ...old].slice(0, 8));
     } catch {
       // The counter is informational; a failure here must not hide the change itself.
     }
@@ -197,7 +194,7 @@ function Todos({ bootMs }) {
   const add = async (event) => {
     event.preventDefault();
     const label = title.trim() ? `「${title.trim()}」を追加` : 'Todo を追加';
-    if (await run(label, () => call('todos', { method: 'POST', json: { title } }), 'list')) {
+    if (await run(label, () => call('todos', { method: 'POST', json: { title } }))) {
       setTitle('');
       input.current?.focus();
     }
@@ -205,8 +202,6 @@ function Todos({ bootMs }) {
 
   const remaining = todos?.filter((t) => !t.done).length ?? 0;
   const last = groups[0];
-  const trace = traceId === null ? null : groups.find((g) => g.id === traceId);
-  const closeTrace = () => setTraceId(null);
 
   return (
     <div className="workspace">
@@ -245,7 +240,6 @@ function Todos({ bootMs }) {
             {error}
           </p>
         )}
-        {trace?.target === 'list' && <OpTrace group={trace} onClose={closeTrace} />}
 
         {todos === null ? (
           <p className="muted pad">読み込み中…</p>
@@ -253,14 +247,7 @@ function Todos({ bootMs }) {
           <>
             <ul className="todos" aria-label="Todo の一覧">
               {todos.map((todo) => (
-                <TodoItem
-                  key={todo.id}
-                  todo={todo}
-                  run={run}
-                  busy={busy}
-                  trace={trace?.target === todo.id ? trace : null}
-                  onCloseTrace={closeTrace}
-                />
+                <TodoItem key={todo.id} todo={todo} run={run} busy={busy} />
               ))}
             </ul>
             {todos.length === 0 && <p className="muted pad">Todo はありません。</p>}
@@ -334,7 +321,7 @@ function Todos({ bootMs }) {
   );
 }
 
-function TodoItem({ todo, run, busy, trace, onCloseTrace }) {
+function TodoItem({ todo, run, busy }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(todo.title);
   const [note, setNote] = useState(null); // null: closed; string: open
@@ -346,26 +333,22 @@ function TodoItem({ todo, run, busy, trace, onCloseTrace }) {
     const next = !done;
     setDone(next);
     const label = `「${todo.title}」を${next ? '完了にする' : '未完了に戻す'}`;
-    if (!(await run(label, () => call(`todos/${todo.id}`, { method: 'PATCH', json: { done: next } }), todo.id))) setDone(todo.done);
+    if (!(await run(label, () => call(`todos/${todo.id}`, { method: 'PATCH', json: { done: next } })))) setDone(todo.done);
   };
 
   const save = async (event) => {
     event.preventDefault();
     const label = `「${todo.title}」の名前を変更`;
-    if (await run(label, () => call(`todos/${todo.id}`, { method: 'PATCH', json: { title: draft } }), todo.id)) setEditing(false);
+    if (await run(label, () => call(`todos/${todo.id}`, { method: 'PATCH', json: { title: draft } }))) setEditing(false);
   };
 
   const openNote = () =>
-    run(
-      `「${todo.title}」のメモを開く`,
-      async () => {
-        setNote(await call(`todos/${todo.id}/note`));
-      },
-      todo.id,
-    );
+    run(`「${todo.title}」のメモを開く`, async () => {
+      setNote(await call(`todos/${todo.id}/note`));
+    });
 
   const saveNote = async () => {
-    if (await run(`「${todo.title}」のメモを保存`, () => call(`todos/${todo.id}/note`, { method: 'PUT', text: note }), todo.id)) setNote(null);
+    if (await run(`「${todo.title}」のメモを保存`, () => call(`todos/${todo.id}/note`, { method: 'PUT', text: note }))) setNote(null);
   };
 
   return (
@@ -434,7 +417,7 @@ function TodoItem({ todo, run, busy, trace, onCloseTrace }) {
               type="button"
               className="btn btn-ghost btn-sm danger"
               disabled={busy}
-              onClick={() => run(`「${todo.title}」を削除`, () => call(`todos/${todo.id}`, { method: 'DELETE' }), 'list')}
+              onClick={() => run(`「${todo.title}」を削除`, () => call(`todos/${todo.id}`, { method: 'DELETE' }))}
               aria-label={`「${todo.title}」を削除`}
             >
               <Trash2 size={14} aria-hidden="true" />
@@ -458,7 +441,6 @@ function TodoItem({ todo, run, busy, trace, onCloseTrace }) {
           </div>
         </div>
       )}
-      {trace && <OpTrace group={trace} onClose={onCloseTrace} />}
     </li>
   );
 }

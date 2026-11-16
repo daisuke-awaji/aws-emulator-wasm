@@ -40,3 +40,7 @@
 - Todo を操作すると、その Todo の下に、実行した SDK（例：`docs.send(UpdateCommand)`、`sqs.send(SendMessageCommand)`）が出る。行を開くと入力と出力（エラーならその名前と文）。追加と削除は入力欄の下。読み直しの呼び出しは「画面の読み直し」にまとめた。下の「SDK の呼び出し」欄の行も同じように開ける。
 - 仕組み：各クライアントの `send` を包んでコマンド名・入力・出力を残し、HTTP 要求の `x-demo-sdk-call` ヘッダーで onCall の応答と結び付ける。コマンド名は SDK の `context.commandName` から取る（ビルドでクラス名が縮むため）。lib-dynamodb のコマンドは PutItemCommand → PutCommand のように戻す。
 - e2e：Todo の一覧は直下の li だけを数えるようにした（Todo の下の SDK の行も li のため）。新しいテスト 1 件（完了・メモを開く〔NoSuchKey〕・メモを保存・名前の変更が弾かれる〔0 回〕・削除・閉じる）。Playwright 20 件 pass。
+
+## 2026-11-16 Todo の下の SDK の表示を取りやめ
+- ユーザーの判断で、Todo の直下（と入力欄の下）に出していた SDK の実行は外した。「SDK の呼び出し」欄の行を開くと入力と出力が見られる部分と、操作名に Todo の題名を付ける部分は残した。
+- e2e は欄の行を開いて入力・出力を確かめるテストに置き換え、Todo の下に何も出ないことも確かめる。Playwright 20 件 pass。
